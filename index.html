@@ -373,6 +373,12 @@
             </div>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <button onclick="openMenuManager()" style="padding: 2.5rem; background: linear-gradient(135deg, #e63946, #c1121f); color: white; border: none; border-radius: 15px; font-size: 1.1rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                    <span style="font-size: 3rem;">🍽️</span>
+                    <span>Menu Management</span>
+                    <span style="font-size: 0.85rem; opacity: 0.9; font-weight: 400;">Add/edit food & categories</span>
+                </button>
+                
                 <button onclick="showDriverManagementModal()" style="padding: 2.5rem; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 15px; font-size: 1.1rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
                     <span style="font-size: 3rem;">🚗</span>
                     <span>Driver Management</span>
@@ -963,6 +969,141 @@
                 cardInputs.forEach(input => input.removeAttribute('required'));
             }
         }
+    </script>
+    
+    <!-- MENU MANAGER MODAL -->
+    <div class="modal" id="menuManagerModal" style="display: none; z-index: 10003;">
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+            <button class="close-btn" onclick="document.getElementById('menuManagerModal').style.display='none'">×</button>
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">🍽️</div>
+                <h2 style="color: #e63946; margin: 0;">Menu Management</h2>
+                <p style="color: rgba(255,255,255,0.6);">Add, edit, and manage food items & categories</p>
+            </div>
+            <div id="menuManagerContent"></div>
+        </div>
+    </div>
+    
+    <!-- FOOD EDITOR MODAL -->
+    <div class="modal" id="foodEditorModal" style="display: none; z-index: 10004;">
+        <div class="modal-content" style="max-width: 500px; max-height: 90vh; overflow-y: auto;">
+            <button class="close-btn" onclick="closeFoodEditor()">×</button>
+            <h2 id="foodEditorTitle" style="color: #10b981; text-align: center; margin-bottom: 1.5rem;">Add Food Item</h2>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Category *</label>
+                <select id="foodEditCategory" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+                    <option value="">Select category</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Food Name *</label>
+                <input type="text" id="foodEditName" placeholder="e.g. Chicken Shawarma Wrap" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Price (£) *</label>
+                    <input type="number" id="foodEditPrice" step="0.01" placeholder="6.99" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Icon (emoji)</label>
+                    <input type="text" id="foodEditIcon" placeholder="🌯" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1.5rem; text-align: center;">
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Description</label>
+                <textarea id="foodEditDesc" rows="2" placeholder="Describe this food item..." style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; resize: vertical;"></textarea>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Image URL (optional - leave empty for icon)</label>
+                <input type="text" id="foodEditImage" placeholder="https://example.com/image.jpg" oninput="previewFoodImage()" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+                <div id="foodEditImagePreview" style="margin-top: 0.5rem;"></div>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Extras/Options (one per line: Name:Price)</label>
+                <textarea id="foodEditOptions" rows="4" placeholder="Extra Meat:2.00&#10;Add Cheese:1.00&#10;Make it Spicy:0" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; resize: vertical; font-family: monospace;"></textarea>
+            </div>
+            
+            <button onclick="saveFoodItem()" style="width: 100%; padding: 1rem; background: linear-gradient(45deg, #10b981, #059669); color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: 700; cursor: pointer;">
+                💾 Save Food Item
+            </button>
+        </div>
+    </div>
+    
+    <!-- CATEGORY EDITOR MODAL -->
+    <div class="modal" id="categoryEditorModal" style="display: none; z-index: 10004;">
+        <div class="modal-content" style="max-width: 450px;">
+            <button class="close-btn" onclick="closeCategoryEditor()">×</button>
+            <h2 id="categoryEditorTitle" style="color: #8b5cf6; text-align: center; margin-bottom: 1.5rem;">Add Category</h2>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Category Key * (no spaces)</label>
+                <input type="text" id="categoryEditKey" placeholder="e.g. shawarma, kebabs, drinks" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Display Name *</label>
+                <input type="text" id="categoryEditName" placeholder="e.g. Shawarma Wraps" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Icon (emoji)</label>
+                <input type="text" id="categoryEditIcon" placeholder="🌯" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; font-size: 1.5rem; text-align: center;">
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.3rem; color: rgba(255,255,255,0.8);">Image URL (optional - leave empty for icon)</label>
+                <input type="text" id="categoryEditImage" placeholder="https://example.com/category.jpg" oninput="previewCategoryImage()" style="width: 100%; padding: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white;">
+                <div id="categoryEditImagePreview" style="margin-top: 0.5rem;"></div>
+            </div>
+            
+            <button onclick="saveCategory()" style="width: 100%; padding: 1rem; background: linear-gradient(45deg, #8b5cf6, #7c3aed); color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: 700; cursor: pointer;">
+                💾 Save Category
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // Populate category dropdown when food editor opens
+        document.getElementById('foodEditorModal').addEventListener('click', function(e) {
+            if (e.target === this) closeFoodEditor();
+        });
+        document.getElementById('categoryEditorModal').addEventListener('click', function(e) {
+            if (e.target === this) closeCategoryEditor();
+        });
+        document.getElementById('menuManagerModal').addEventListener('click', function(e) {
+            if (e.target === this) this.style.display = 'none';
+        });
+        
+        // Populate categories dropdown
+        const originalOpenAddFood = window.openAddFood;
+        window.openAddFood = function() {
+            const select = document.getElementById('foodEditCategory');
+            if (select && typeof categories !== 'undefined') {
+                select.innerHTML = '<option value="">Select category</option>' + 
+                    Object.entries(categories).map(([key, cat]) => 
+                        `<option value="${key}">${cat.name}</option>`
+                    ).join('');
+            }
+            if (originalOpenAddFood) originalOpenAddFood();
+        };
+        
+        const originalOpenEditFood = window.openEditFood;
+        window.openEditFood = function(catKey, foodId) {
+            const select = document.getElementById('foodEditCategory');
+            if (select && typeof categories !== 'undefined') {
+                select.innerHTML = '<option value="">Select category</option>' + 
+                    Object.entries(categories).map(([key, cat]) => 
+                        `<option value="${key}">${cat.name}</option>`
+                    ).join('');
+            }
+            if (originalOpenEditFood) originalOpenEditFood(catKey, foodId);
+        };
     </script>
 </body>
 </html>

@@ -27,23 +27,36 @@ const UK_CONFIG = {
     currency: '£'
 };
 
-// Check if restaurant is open for orders
-function isRestaurantOpen() {
+// Get UK time (handles BST/GMT automatically)
+function getUKTime() {
     const now = new Date();
-    const currentHour = now.getHours() + (now.getMinutes() / 60);
+    // Convert to UK timezone
+    const ukTime = new Date(now.toLocaleString('en-GB', { timeZone: 'Europe/London' }));
+    return ukTime;
+}
+
+function getUKHour() {
+    const ukTime = getUKTime();
+    return ukTime.getHours() + (ukTime.getMinutes() / 60);
+}
+
+// Check if restaurant is open for orders (UK TIME)
+function isRestaurantOpen() {
+    const currentHour = getUKHour();
     return currentHour >= UK_CONFIG.restaurant.openTime && currentHour < UK_CONFIG.restaurant.lastOrderTime;
 }
 
 function getRestaurantStatus() {
-    const now = new Date();
-    const currentHour = now.getHours() + (now.getMinutes() / 60);
+    const currentHour = getUKHour();
+    const ukTime = getUKTime();
+    const timeStr = ukTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     
     if (currentHour < UK_CONFIG.restaurant.openTime) {
-        return { open: false, message: `Opens at ${UK_CONFIG.restaurant.openTime}:00` };
+        return { open: false, message: `Opens at 11:00 (UK time: ${timeStr})` };
     } else if (currentHour >= UK_CONFIG.restaurant.closeTime) {
-        return { open: false, message: 'Closed for today' };
+        return { open: false, message: `Closed for today (UK time: ${timeStr})` };
     } else if (currentHour >= UK_CONFIG.restaurant.lastOrderTime) {
-        return { open: false, message: 'Kitchen closed - Last orders at 22:30' };
+        return { open: false, message: `Kitchen closed - Last orders at 22:30 (UK time: ${timeStr})` };
     }
     return { open: true, message: 'Open for orders' };
 }
@@ -96,14 +109,17 @@ const RESTAURANT_CREDENTIALS = {
 // ========================================
 // COMPLETE ANTALYA SHAWARMA MENU DATA
 // ========================================
-const menuData = {
+// Using let so owner can modify menu
+let menuData = {
     // SHAWARMA WRAPS & SANDWICHES
     shawarma: [
         { 
             id: 101, 
             name: 'Chicken Shawarma Wrap', 
             price: 6.99, 
-            icon: '🌯', 
+            icon: '🌯',
+            image: '', // Custom image URL (empty = use icon)
+            available: true,
             desc: 'Tender marinated chicken with garlic sauce, salad & pickles in fresh naan',
             options: [
                 {name: 'Extra Meat', price: 2.00},
@@ -118,7 +134,9 @@ const menuData = {
             id: 102, 
             name: 'Lamb Shawarma Wrap', 
             price: 7.99, 
-            icon: '🌯', 
+            icon: '🌯',
+            image: '',
+            available: true,
             desc: 'Juicy lamb shawarma with tahini sauce, fresh salad in naan bread',
             options: [
                 {name: 'Extra Meat', price: 2.50},
@@ -132,7 +150,9 @@ const menuData = {
             id: 103, 
             name: 'Mixed Shawarma Wrap', 
             price: 8.99, 
-            icon: '🌯', 
+            icon: '🌯',
+            image: '',
+            available: true,
             desc: 'Best of both - chicken & lamb shawarma combo with all sauces',
             options: [
                 {name: 'Extra Meat', price: 3.00},
@@ -829,24 +849,58 @@ const menuData = {
 };
 
 // ========================================
-// CATEGORY NAMES & ICONS
+// CATEGORY NAMES & ICONS (can be modified by owner)
 // ========================================
-const categories = {
-    shawarma: { name: 'Shawarma Wraps', icon: '🌯' },
-    portions_chips: { name: 'Portions (Chips)', icon: '🍟' },
-    portions_rice: { name: 'Portions (Rice)', icon: '🍚' },
-    grill: { name: 'Grill Portions', icon: '🍖' },
-    platters: { name: 'Family Platters', icon: '🍽️' },
-    rice: { name: 'Rice & Biryani', icon: '🍚' },
-    chicken: { name: 'Roasted Chicken', icon: '🍗' },
-    fatayer: { name: 'Fatayer', icon: '🥟' },
-    pizza: { name: 'Pizza', icon: '🍕' },
-    kebabs: { name: 'Kebabs', icon: '🥙' },
-    meals: { name: 'Meal Deals', icon: '🎁' },
-    sides: { name: 'Sides & Extras', icon: '🥗' },
-    sauces: { name: 'Sauces', icon: '🧄' },
-    drinks: { name: 'Drinks', icon: '🥤' }
+let categories = {
+    shawarma: { name: 'Shawarma Wraps', icon: '🌯', image: '' },
+    portions_chips: { name: 'Portions (Chips)', icon: '🍟', image: '' },
+    portions_rice: { name: 'Portions (Rice)', icon: '🍚', image: '' },
+    grill: { name: 'Grill Portions', icon: '🍖', image: '' },
+    platters: { name: 'Family Platters', icon: '🍽️', image: '' },
+    rice: { name: 'Rice & Biryani', icon: '🍚', image: '' },
+    chicken: { name: 'Roasted Chicken', icon: '🍗', image: '' },
+    fatayer: { name: 'Fatayer', icon: '🥟', image: '' },
+    pizza: { name: 'Pizza', icon: '🍕', image: '' },
+    kebabs: { name: 'Kebabs', icon: '🥙', image: '' },
+    meals: { name: 'Meal Deals', icon: '🎁', image: '' },
+    sides: { name: 'Sides & Extras', icon: '🥗', image: '' },
+    sauces: { name: 'Sauces', icon: '🧄', image: '' },
+    drinks: { name: 'Drinks', icon: '🥤', image: '' }
 };
+
+// Load saved menu data from localStorage
+function loadMenuData() {
+    const savedMenu = localStorage.getItem('menuData');
+    const savedCategories = localStorage.getItem('categories');
+    if (savedMenu) {
+        try {
+            const parsed = JSON.parse(savedMenu);
+            // Merge with default menu to preserve structure
+            Object.keys(parsed).forEach(key => {
+                if (menuData[key]) {
+                    menuData[key] = parsed[key];
+                }
+            });
+        } catch(e) { console.log('Error loading menu data'); }
+    }
+    if (savedCategories) {
+        try {
+            const parsed = JSON.parse(savedCategories);
+            Object.keys(parsed).forEach(key => {
+                if (categories[key]) {
+                    categories[key] = { ...categories[key], ...parsed[key] };
+                } else {
+                    categories[key] = parsed[key];
+                }
+            });
+        } catch(e) { console.log('Error loading categories'); }
+    }
+}
+
+function saveMenuData() {
+    localStorage.setItem('menuData', JSON.stringify(menuData));
+    localStorage.setItem('categories', JSON.stringify(categories));
+}
 
 // ========================================
 // GLOBAL STATE
@@ -1257,21 +1311,36 @@ function displayMenu(category) {
     
     const items = menuData[category] || [];
     items.forEach(item => {
+        // Skip unavailable items for regular users (show for owner)
+        if (item.available === false && !isOwnerLoggedIn) return;
+        
         const isFavorite = currentUser && userFavorites[currentUser.email]?.includes(item.id);
+        
+        // Determine image display: custom image > icon
+        const imageDisplay = item.image 
+            ? `<img src="${item.image}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">` 
+            : item.icon;
+        
+        const unavailableStyle = item.available === false ? 'opacity: 0.5;' : '';
+        const unavailableBadge = item.available === false ? '<span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(239,68,68,0.9); color: white; padding: 0.3rem 0.6rem; border-radius: 5px; font-size: 0.7rem; font-weight: 700;">UNAVAILABLE</span>' : '';
         
         const card = document.createElement('div');
         card.className = 'food-card';
+        card.style.cssText = unavailableStyle;
         card.innerHTML = `
             <button class="favorite-btn ${isFavorite ? 'active' : ''}" onclick="toggleFavorite(${item.id}, event)">
                 ${isFavorite ? '❤️' : '🤍'}
             </button>
-            <div class="food-image">${item.icon}</div>
+            <div class="food-image" style="position: relative;">
+                ${imageDisplay}
+                ${unavailableBadge}
+            </div>
             <div class="food-info">
                 <div class="food-name">${item.name}</div>
                 <div class="food-desc">${item.desc}</div>
                 <div class="food-footer">
                     <div class="food-price">${formatPrice(item.price)}</div>
-                    <button class="add-btn" onclick="openFoodModal(${item.id})">Order</button>
+                    ${item.available !== false ? `<button class="add-btn" onclick="openFoodModal(${item.id})">Order</button>` : '<span style="color: #ef4444; font-size: 0.8rem;">Not Available</span>'}
                 </div>
             </div>
         `;
@@ -1295,11 +1364,19 @@ function renderCategories() {
     categoriesContainer.innerHTML = '';
     
     Object.entries(categories).forEach(([key, cat], index) => {
+        // Only show categories that have items
+        if (!menuData[key] || menuData[key].length === 0) return;
+        
+        // Determine category image display
+        const catImageDisplay = cat.image 
+            ? `<img src="${cat.image}" alt="${cat.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">` 
+            : cat.icon;
+        
         const catEl = document.createElement('div');
         catEl.className = `category-item ${index === 0 ? 'active' : ''}`;
         catEl.onclick = () => filterCategory(key);
         catEl.innerHTML = `
-            <div class="category-icon">${cat.icon}</div>
+            <div class="category-icon">${catImageDisplay}</div>
             <div class="category-name">${cat.name}</div>
         `;
         categoriesContainer.appendChild(catEl);
@@ -3432,6 +3509,296 @@ function updateOwnerStats() {
 }
 
 // ========================================
+// OWNER MENU MANAGEMENT SYSTEM
+// ========================================
+let editingFoodId = null;
+let editingCategory = null;
+
+function openMenuManager() {
+    const modal = document.getElementById('menuManagerModal');
+    if (modal) {
+        renderMenuManagerList();
+        modal.style.display = 'flex';
+    }
+}
+
+function renderMenuManagerList() {
+    const container = document.getElementById('menuManagerContent');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+            <button onclick="openAddCategory()" style="background: linear-gradient(45deg, #8b5cf6, #7c3aed); color: white; border: none; padding: 0.8rem 1.2rem; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                ➕ Add Category
+            </button>
+            <button onclick="openAddFood()" style="background: linear-gradient(45deg, #10b981, #059669); color: white; border: none; padding: 0.8rem 1.2rem; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                🍽️ Add Food Item
+            </button>
+        </div>
+        
+        ${Object.entries(categories).map(([catKey, cat]) => `
+            <div style="background: rgba(255,255,255,0.05); border-radius: 12px; margin-bottom: 1rem; overflow: hidden;">
+                <div style="background: rgba(139,92,246,0.2); padding: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.8rem;">
+                        ${cat.image ? `<img src="${cat.image}" style="width: 40px; height: 40px; border-radius: 8px; object-fit: cover;">` : `<span style="font-size: 1.5rem;">${cat.icon}</span>`}
+                        <span style="font-weight: 700;">${cat.name}</span>
+                        <span style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">(${menuData[catKey]?.length || 0} items)</span>
+                    </div>
+                    <button onclick="openEditCategory('${catKey}')" style="background: rgba(255,255,255,0.1); color: white; border: none; padding: 0.5rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                        ✏️ Edit
+                    </button>
+                </div>
+                
+                <div style="padding: 0.5rem;">
+                    ${(menuData[catKey] || []).map(item => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.05); flex-wrap: wrap; gap: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.8rem; flex: 1; min-width: 200px;">
+                                ${item.image ? `<img src="${item.image}" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">` : `<span style="font-size: 1.3rem;">${item.icon}</span>`}
+                                <div>
+                                    <div style="font-weight: 600; ${item.available === false ? 'text-decoration: line-through; opacity: 0.5;' : ''}">${item.name}</div>
+                                    <div style="font-size: 0.85rem; color: #10b981;">${formatPrice(item.price)}</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.3rem;">
+                                <button onclick="toggleFoodAvailability('${catKey}', ${item.id})" style="background: ${item.available !== false ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${item.available !== false ? '#10b981' : '#ef4444'}; border: none; padding: 0.4rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                    ${item.available !== false ? '✅' : '❌'}
+                                </button>
+                                <button onclick="openEditFood('${catKey}', ${item.id})" style="background: rgba(59,130,246,0.2); color: #3b82f6; border: none; padding: 0.4rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                    ✏️
+                                </button>
+                                <button onclick="deleteFood('${catKey}', ${item.id})" style="background: rgba(239,68,68,0.2); color: #ef4444; border: none; padding: 0.4rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('')}
+    `;
+}
+
+function toggleFoodAvailability(catKey, foodId) {
+    const item = menuData[catKey]?.find(i => i.id === foodId);
+    if (item) {
+        item.available = item.available === false ? true : false;
+        saveMenuData();
+        renderMenuManagerList();
+        displayMenu(currentCategory);
+    }
+}
+
+function openAddFood() {
+    editingFoodId = null;
+    editingCategory = null;
+    
+    const modal = document.getElementById('foodEditorModal');
+    if (modal) {
+        document.getElementById('foodEditorTitle').textContent = 'Add New Food';
+        document.getElementById('foodEditCategory').value = '';
+        document.getElementById('foodEditName').value = '';
+        document.getElementById('foodEditPrice').value = '';
+        document.getElementById('foodEditIcon').value = '🍽️';
+        document.getElementById('foodEditDesc').value = '';
+        document.getElementById('foodEditOptions').value = '';
+        document.getElementById('foodEditImage').value = '';
+        document.getElementById('foodEditImagePreview').innerHTML = '';
+        modal.style.display = 'flex';
+    }
+}
+
+function openEditFood(catKey, foodId) {
+    const item = menuData[catKey]?.find(i => i.id === foodId);
+    if (!item) return;
+    
+    editingFoodId = foodId;
+    editingCategory = catKey;
+    
+    const modal = document.getElementById('foodEditorModal');
+    if (modal) {
+        document.getElementById('foodEditorTitle').textContent = 'Edit Food Item';
+        document.getElementById('foodEditCategory').value = catKey;
+        document.getElementById('foodEditName').value = item.name;
+        document.getElementById('foodEditPrice').value = item.price;
+        document.getElementById('foodEditIcon').value = item.icon || '🍽️';
+        document.getElementById('foodEditDesc').value = item.desc || '';
+        document.getElementById('foodEditOptions').value = item.options ? item.options.map(o => `${o.name}:${o.price}`).join('\n') : '';
+        document.getElementById('foodEditImage').value = item.image || '';
+        document.getElementById('foodEditImagePreview').innerHTML = item.image ? `<img src="${item.image}" style="max-width: 100px; max-height: 100px; border-radius: 8px;">` : '';
+        modal.style.display = 'flex';
+    }
+}
+
+function saveFoodItem() {
+    const category = document.getElementById('foodEditCategory').value;
+    const name = document.getElementById('foodEditName').value.trim();
+    const price = parseFloat(document.getElementById('foodEditPrice').value);
+    const icon = document.getElementById('foodEditIcon').value || '🍽️';
+    const desc = document.getElementById('foodEditDesc').value.trim();
+    const optionsText = document.getElementById('foodEditOptions').value.trim();
+    const image = document.getElementById('foodEditImage').value.trim();
+    
+    if (!category || !name || isNaN(price)) {
+        alert('❌ Please fill category, name and price');
+        return;
+    }
+    
+    // Parse options
+    const options = optionsText ? optionsText.split('\n').map(line => {
+        const [optName, optPrice] = line.split(':');
+        return { name: optName?.trim() || '', price: parseFloat(optPrice) || 0 };
+    }).filter(o => o.name) : [];
+    
+    if (editingFoodId && editingCategory) {
+        // Edit existing
+        const item = menuData[editingCategory]?.find(i => i.id === editingFoodId);
+        if (item) {
+            // If category changed, move item
+            if (editingCategory !== category) {
+                menuData[editingCategory] = menuData[editingCategory].filter(i => i.id !== editingFoodId);
+                if (!menuData[category]) menuData[category] = [];
+                menuData[category].push({ ...item, name, price, icon, desc, options, image, available: item.available });
+            } else {
+                item.name = name;
+                item.price = price;
+                item.icon = icon;
+                item.desc = desc;
+                item.options = options;
+                item.image = image;
+            }
+        }
+    } else {
+        // Add new
+        if (!menuData[category]) menuData[category] = [];
+        const newId = Date.now();
+        menuData[category].push({
+            id: newId,
+            name,
+            price,
+            icon,
+            image,
+            desc,
+            options,
+            available: true
+        });
+    }
+    
+    saveMenuData();
+    closeFoodEditor();
+    renderMenuManagerList();
+    renderCategories();
+    displayMenu(currentCategory);
+    alert('✅ Food item saved!');
+}
+
+function deleteFood(catKey, foodId) {
+    if (!confirm('Are you sure you want to delete this food item?')) return;
+    
+    menuData[catKey] = menuData[catKey].filter(i => i.id !== foodId);
+    saveMenuData();
+    renderMenuManagerList();
+    displayMenu(currentCategory);
+}
+
+function closeFoodEditor() {
+    const modal = document.getElementById('foodEditorModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function openAddCategory() {
+    editingCategory = null;
+    
+    const modal = document.getElementById('categoryEditorModal');
+    if (modal) {
+        document.getElementById('categoryEditorTitle').textContent = 'Add New Category';
+        document.getElementById('categoryEditKey').value = '';
+        document.getElementById('categoryEditKey').disabled = false;
+        document.getElementById('categoryEditName').value = '';
+        document.getElementById('categoryEditIcon').value = '🍽️';
+        document.getElementById('categoryEditImage').value = '';
+        document.getElementById('categoryEditImagePreview').innerHTML = '';
+        modal.style.display = 'flex';
+    }
+}
+
+function openEditCategory(catKey) {
+    const cat = categories[catKey];
+    if (!cat) return;
+    
+    editingCategory = catKey;
+    
+    const modal = document.getElementById('categoryEditorModal');
+    if (modal) {
+        document.getElementById('categoryEditorTitle').textContent = 'Edit Category';
+        document.getElementById('categoryEditKey').value = catKey;
+        document.getElementById('categoryEditKey').disabled = true;
+        document.getElementById('categoryEditName').value = cat.name;
+        document.getElementById('categoryEditIcon').value = cat.icon || '🍽️';
+        document.getElementById('categoryEditImage').value = cat.image || '';
+        document.getElementById('categoryEditImagePreview').innerHTML = cat.image ? `<img src="${cat.image}" style="max-width: 100px; max-height: 100px; border-radius: 8px;">` : '';
+        modal.style.display = 'flex';
+    }
+}
+
+function saveCategory() {
+    const key = document.getElementById('categoryEditKey').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const name = document.getElementById('categoryEditName').value.trim();
+    const icon = document.getElementById('categoryEditIcon').value || '🍽️';
+    const image = document.getElementById('categoryEditImage').value.trim();
+    
+    if (!key || !name) {
+        alert('❌ Please fill key and name');
+        return;
+    }
+    
+    if (editingCategory) {
+        // Edit existing
+        categories[editingCategory].name = name;
+        categories[editingCategory].icon = icon;
+        categories[editingCategory].image = image;
+    } else {
+        // Add new
+        if (categories[key]) {
+            alert('❌ Category key already exists');
+            return;
+        }
+        categories[key] = { name, icon, image };
+        if (!menuData[key]) menuData[key] = [];
+    }
+    
+    saveMenuData();
+    closeCategoryEditor();
+    renderMenuManagerList();
+    renderCategories();
+    alert('✅ Category saved!');
+}
+
+function closeCategoryEditor() {
+    const modal = document.getElementById('categoryEditorModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function previewFoodImage() {
+    const url = document.getElementById('foodEditImage').value.trim();
+    const preview = document.getElementById('foodEditImagePreview');
+    if (url && preview) {
+        preview.innerHTML = `<img src="${url}" style="max-width: 100px; max-height: 100px; border-radius: 8px;" onerror="this.parentElement.innerHTML='Invalid URL'">`;
+    } else if (preview) {
+        preview.innerHTML = '';
+    }
+}
+
+function previewCategoryImage() {
+    const url = document.getElementById('categoryEditImage').value.trim();
+    const preview = document.getElementById('categoryEditImagePreview');
+    if (url && preview) {
+        preview.innerHTML = `<img src="${url}" style="max-width: 100px; max-height: 100px; border-radius: 8px;" onerror="this.parentElement.innerHTML='Invalid URL'">`;
+    } else if (preview) {
+        preview.innerHTML = '';
+    }
+}
+
+// ========================================
 // DRIVER FUNCTIONS
 // ========================================
 function showDriverLogin() {
@@ -4604,6 +4971,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load data
     loadData();
     loadBankDetails();
+    loadMenuData(); // Load custom menu data from owner
     
     // Render categories
     renderCategories();
@@ -4749,6 +5117,8 @@ window.updateOrdersBadge = updateOrdersBadge;
 // Restaurant status functions
 window.isRestaurantOpen = isRestaurantOpen;
 window.getRestaurantStatus = getRestaurantStatus;
+window.getUKTime = getUKTime;
+window.getUKHour = getUKHour;
 window.resetAllData = resetAllData;
 
 // Location functions
@@ -4763,6 +5133,24 @@ window.showLocationConfirmation = showLocationConfirmation;
 window.confirmCurrentLocation = confirmCurrentLocation;
 window.changeDeliveryLocation = changeDeliveryLocation;
 window.openCheckoutModal = openCheckoutModal;
+
+// Menu management functions (Owner)
+window.openMenuManager = openMenuManager;
+window.renderMenuManagerList = renderMenuManagerList;
+window.toggleFoodAvailability = toggleFoodAvailability;
+window.openAddFood = openAddFood;
+window.openEditFood = openEditFood;
+window.saveFoodItem = saveFoodItem;
+window.deleteFood = deleteFood;
+window.closeFoodEditor = closeFoodEditor;
+window.openAddCategory = openAddCategory;
+window.openEditCategory = openEditCategory;
+window.saveCategory = saveCategory;
+window.closeCategoryEditor = closeCategoryEditor;
+window.previewFoodImage = previewFoodImage;
+window.previewCategoryImage = previewCategoryImage;
+window.saveMenuData = saveMenuData;
+window.loadMenuData = loadMenuData;
 
 // Modal functions
 window.openModal = openModal;
