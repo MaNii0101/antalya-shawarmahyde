@@ -1532,6 +1532,17 @@ function proceedToCheckout() {
         return;
     }
     
+    // Check if user has an active order
+    const activeOrder = pendingOrders.find(o => 
+        o.userId === currentUser.email && 
+        ['pending', 'accepted', 'waiting_driver', 'out_for_delivery'].includes(o.status)
+    );
+    
+    if (activeOrder) {
+        alert(`⚠️ You already have an active order!\n\nOrder #${activeOrder.id}\nStatus: ${activeOrder.status.replace('_', ' ').toUpperCase()}\n\nPlease wait until your current order is delivered before placing a new one.`);
+        return;
+    }
+    
     if (!currentUser.address && !selectedLocation) {
         alert('❌ Please set your delivery address first');
         pickLocation();
@@ -1542,6 +1553,18 @@ function proceedToCheckout() {
     
     // Show location confirmation modal first
     showLocationConfirmation();
+}
+
+// Check if user can order (no active orders)
+function userCanOrder() {
+    if (!currentUser) return false;
+    
+    const activeOrder = pendingOrders.find(o => 
+        o.userId === currentUser.email && 
+        ['pending', 'accepted', 'waiting_driver', 'out_for_delivery'].includes(o.status)
+    );
+    
+    return !activeOrder;
 }
 
 function showLocationConfirmation() {
@@ -2502,29 +2525,28 @@ function showRestaurantDashboard() {
     const modal = document.getElementById('restaurantDashboard');
     if (!modal) return;
     
-    // Calculate MONTHLY stats (current month only)
+    // Calculate DAILY stats (today only)
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const today = now.toDateString();
     
-    // Filter orders from current month
-    const monthlyOrders = [...pendingOrders, ...orderHistory].filter(o => {
+    // Filter orders from today
+    const dailyOrders = [...pendingOrders, ...orderHistory].filter(o => {
         const orderDate = new Date(o.createdAt);
-        return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+        return orderDate.toDateString() === today;
     });
     
-    const monthlyRevenue = monthlyOrders.reduce((sum, o) => sum + o.total, 0);
+    const dailyRevenue = dailyOrders.reduce((sum, o) => sum + o.total, 0);
     const pendingCount = pendingOrders.filter(o => o.status === 'pending').length;
-    const completedCount = monthlyOrders.filter(o => o.status === 'completed').length;
+    const completedCount = dailyOrders.filter(o => o.status === 'completed').length;
     
-    // Update stats - Monthly only (no total revenue for staff)
-    const monthlyRevenueEl = document.getElementById('monthlyRevenueStat');
-    const monthlyOrdersEl = document.getElementById('monthlyOrdersStat');
+    // Update stats - Daily only (no total revenue for staff)
+    const dailyRevenueEl = document.getElementById('monthlyRevenueStat');
+    const dailyOrdersEl = document.getElementById('monthlyOrdersStat');
     const pendingOrdersEl = document.getElementById('pendingOrdersStat');
     const completedOrdersEl = document.getElementById('completedOrdersStat');
     
-    if (monthlyRevenueEl) monthlyRevenueEl.textContent = formatPrice(monthlyRevenue);
-    if (monthlyOrdersEl) monthlyOrdersEl.textContent = monthlyOrders.length;
+    if (dailyRevenueEl) dailyRevenueEl.textContent = formatPrice(dailyRevenue);
+    if (dailyOrdersEl) dailyOrdersEl.textContent = dailyOrders.length;
     if (pendingOrdersEl) pendingOrdersEl.textContent = pendingCount;
     if (completedOrdersEl) completedOrdersEl.textContent = completedCount;
     
@@ -3582,25 +3604,84 @@ function updateDriverLocation() {
         return;
     }
     
+    const driverId = sessionStorage.getItem('loggedInDriver');
+    if (!driverId) {
+        alert('❌ Please login first');
+        return;
+    }
+    
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            const driverId = sessionStorage.getItem('loggedInDriver');
-            if (driverId) {
-                window.driverSystem.update(driverId, {
-                    currentLocation: {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        updatedAt: new Date().toISOString()
-                    }
-                });
-                alert('✅ Location updated successfully!');
-            }
+            const locationData = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Update driver's location in system
+            window.driverSystem.update(driverId, {
+                currentLocation: locationData
+            });
+            
+            // Save to localStorage for customer tracking
+            const liveLocations = JSON.parse(localStorage.getItem('driverLiveLocations') || '{}');
+            liveLocations[driverId] = locationData;
+            localStorage.setItem('driverLiveLocations', JSON.stringify(liveLocations));
+            
+            alert('✅ Location updated!\n\nCustomers can now see your live location.');
+            showDriverDashboard();
         },
         (error) => {
             alert('❌ Unable to get your location: ' + error.message);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         }
     );
 }
+
+// Auto-update driver location every 30 seconds when online
+function startDriverLocationTracking() {
+    const driverId = sessionStorage.getItem('loggedInDriver');
+    if (!driverId) return;
+    
+    const driver = window.driverSystem.get(driverId);
+    if (!driver || !driver.available) return;
+    
+    // Check if there are assigned orders
+    const hasOrders = pendingOrders.some(o => o.driverId === driverId);
+    if (!hasOrders) return;
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const locationData = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                window.driverSystem.update(driverId, { currentLocation: locationData });
+                
+                const liveLocations = JSON.parse(localStorage.getItem('driverLiveLocations') || '{}');
+                liveLocations[driverId] = locationData;
+                localStorage.setItem('driverLiveLocations', JSON.stringify(liveLocations));
+            },
+            () => {}, // Silently fail
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    }
+}
+
+// Start tracking when driver goes online or accepts order
+setInterval(() => {
+    const driverId = sessionStorage.getItem('loggedInDriver');
+    if (driverId) {
+        startDriverLocationTracking();
+    }
+}, 30000); // Update every 30 seconds
 
 function openDirections(address) {
     // Open Google Maps with directions
@@ -3754,9 +3835,22 @@ function initTrackingMap(order, driver) {
     const customerLat = order.deliveryLocation?.lat || UK_CONFIG.restaurant.lat + 0.01;
     const customerLng = order.deliveryLocation?.lng || UK_CONFIG.restaurant.lng + 0.01;
     
-    // Driver location (simulated - starts near restaurant)
-    const driverLat = driver?.currentLocation?.lat || UK_CONFIG.restaurant.lat + 0.005;
-    const driverLng = driver?.currentLocation?.lng || UK_CONFIG.restaurant.lng + 0.003;
+    // Driver location - check if driver has real location, otherwise simulate
+    let driverLat, driverLng;
+    
+    // Check for real-time driver location from localStorage
+    const liveDriverLocations = JSON.parse(localStorage.getItem('driverLiveLocations') || '{}');
+    if (liveDriverLocations[order.driverId]) {
+        driverLat = liveDriverLocations[order.driverId].lat;
+        driverLng = liveDriverLocations[order.driverId].lng;
+    } else if (driver?.currentLocation?.lat) {
+        driverLat = driver.currentLocation.lat;
+        driverLng = driver.currentLocation.lng;
+    } else {
+        // Simulate starting from restaurant
+        driverLat = UK_CONFIG.restaurant.lat;
+        driverLng = UK_CONFIG.restaurant.lng;
+    }
     
     const center = {
         lat: (customerLat + driverLat) / 2,
@@ -3765,39 +3859,43 @@ function initTrackingMap(order, driver) {
     
     trackingMap = new google.maps.Map(mapContainer, {
         center: center,
-        zoom: 14,
-        styles: [
-            { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] }
-        ],
-        disableDefaultUI: true,
+        zoom: 15,
+        mapTypeId: 'hybrid', // Satellite with labels
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+            style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+            position: google.maps.ControlPosition.TOP_RIGHT
+        },
         zoomControl: true
     });
     
-    // Customer marker (destination)
+    // Customer marker (destination) - House icon
     customerMarker = new google.maps.Marker({
         position: { lat: customerLat, lng: customerLng },
         map: trackingMap,
         title: 'Delivery Location',
         icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
+            scale: 14,
             fillColor: '#10b981',
             fillOpacity: 1,
             strokeColor: '#ffffff',
             strokeWeight: 3
+        },
+        label: {
+            text: '🏠',
+            fontSize: '16px'
         }
     });
     
-    // Driver marker
+    // Driver marker - Car icon
     driverMarker = new google.maps.Marker({
         position: { lat: driverLat, lng: driverLng },
         map: trackingMap,
         title: order.driverName || 'Driver',
         icon: {
             path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 6,
+            scale: 7,
             fillColor: '#3b82f6',
             fillOpacity: 1,
             strokeColor: '#ffffff',
@@ -3899,6 +3997,13 @@ function closeTrackingModal() {
 let currentRating = 0;
 
 function openDriverRating(orderId, driverId, driverName) {
+    // Check if order was already rated
+    const order = orderHistory.find(o => o.id === orderId);
+    if (order && order.driverRated) {
+        alert(`⚠️ You have already rated this driver!\n\nRating: ${order.driverRating}/5 stars`);
+        return;
+    }
+    
     document.getElementById('ratingOrderId').value = orderId;
     document.getElementById('ratingDriverId').value = driverId;
     document.getElementById('ratingDriverName').textContent = driverName;
@@ -4051,11 +4156,12 @@ function initMap() {
     googleMap = new google.maps.Map(mapContainer, {
         center: center,
         zoom: 14,
-        styles: [
-            { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] }
-        ]
+        mapTypeId: 'hybrid', // Satellite with labels
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+            style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+            position: google.maps.ControlPosition.TOP_RIGHT
+        }
     });
     
     // Restaurant marker
@@ -4405,6 +4511,7 @@ window.getDistanceFromLatLng = getDistanceFromLatLng;
 window.trackDriver = trackDriver;
 window.refreshDriverLocation = refreshDriverLocation;
 window.closeTrackingModal = closeTrackingModal;
+window.startDriverLocationTracking = startDriverLocationTracking;
 
 // Driver rating functions
 window.openDriverRating = openDriverRating;
@@ -4412,6 +4519,9 @@ window.setRating = setRating;
 window.previewRating = previewRating;
 window.resetPreview = resetPreview;
 window.submitDriverRating = submitDriverRating;
+
+// Order functions
+window.userCanOrder = userCanOrder;
 
 // Reorder functions
 window.reorderFromHistory = reorderFromHistory;
