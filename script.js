@@ -1094,6 +1094,7 @@ function loadData() {
         }
         updateFavoritesBadge();
         updateNotificationBadge();
+        updateOrdersBadge();
     }
     
     window.driverSystem.load();
@@ -1532,6 +1533,17 @@ function proceedToCheckout() {
         return;
     }
     
+    // Check if user has an active order
+    const activeOrder = pendingOrders.find(o => 
+        o.userId === currentUser.email && 
+        ['pending', 'accepted', 'waiting_driver', 'out_for_delivery'].includes(o.status)
+    );
+    
+    if (activeOrder) {
+        alert(`⚠️ You already have an active order!\n\nOrder #${activeOrder.id}\nStatus: ${activeOrder.status.replace('_', ' ').toUpperCase()}\n\nPlease wait until your current order is delivered before placing a new one.`);
+        return;
+    }
+    
     if (!currentUser.address && !selectedLocation) {
         alert('❌ Please set your delivery address first');
         pickLocation();
@@ -1542,6 +1554,18 @@ function proceedToCheckout() {
     
     // Show location confirmation modal first
     showLocationConfirmation();
+}
+
+// Check if user can order (no active orders)
+function userCanOrder() {
+    if (!currentUser) return false;
+    
+    const activeOrder = pendingOrders.find(o => 
+        o.userId === currentUser.email && 
+        ['pending', 'accepted', 'waiting_driver', 'out_for_delivery'].includes(o.status)
+    );
+    
+    return !activeOrder;
 }
 
 function showLocationConfirmation() {
@@ -1834,6 +1858,7 @@ function showAccount() {
     if (!modal || !content) return;
     
     const userOrders = orderHistory.filter(o => o.userId === currentUser.email);
+    const activeOrders = pendingOrders.filter(o => o.userId === currentUser.email && o.status === 'out_for_delivery');
     const totalSpent = userOrders.reduce((sum, o) => sum + o.total, 0);
     
     // Profile picture display
@@ -1842,130 +1867,175 @@ function showAccount() {
         : '👤';
     
     content.innerHTML = `
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <div style="font-size: 3rem; margin-bottom: 0.5rem;">👤</div>
-            <h2 style="color: #ff6b6b; margin: 0;">My Account</h2>
-        </div>
-        
-        <div style="background: linear-gradient(135deg, #ff6b6b, #ee5a6f); padding: 2rem; border-radius: 15px; text-align: center; margin-bottom: 1.5rem;">
-            <div style="width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.2); margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; overflow: hidden; border: 4px solid rgba(255,255,255,0.3);">
+        <div style="background: linear-gradient(135deg, #e63946, #c1121f); padding: 1.5rem; border-radius: 15px; text-align: center; margin-bottom: 1.5rem;">
+            <div style="width: 90px; height: 90px; border-radius: 50%; background: rgba(255,255,255,0.2); margin: 0 auto 0.8rem; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; overflow: hidden; border: 3px solid rgba(255,255,255,0.3);">
                 ${profilePic}
             </div>
-            <h3 style="margin: 0; color: white;">${currentUser.name}</h3>
-            <p style="margin: 0.5rem 0 0; color: rgba(255,255,255,0.8);">${currentUser.email}</p>
-            ${currentUser.age ? `<p style="margin: 0.3rem 0 0; color: rgba(255,255,255,0.7); font-size: 0.9rem;">Age: ${currentUser.age}</p>` : ''}
+            <h3 style="margin: 0; color: white; font-size: 1.2rem;">${currentUser.name}</h3>
+            <p style="margin: 0.3rem 0 0; color: rgba(255,255,255,0.8); font-size: 0.9rem;">${currentUser.email}</p>
+            ${currentUser.age ? `<p style="margin: 0.2rem 0 0; color: rgba(255,255,255,0.7); font-size: 0.85rem;">Age: ${currentUser.age}</p>` : ''}
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-            <div style="background: rgba(16,185,129,0.1); padding: 1rem; border-radius: 10px; text-align: center;">
-                <div style="font-size: 1.5rem; font-weight: 700; color: #10b981;">${userOrders.length}</div>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">Orders</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1.2rem;">
+            <div style="background: rgba(42,157,143,0.15); padding: 0.8rem; border-radius: 10px; text-align: center; border: 1px solid rgba(42,157,143,0.3);">
+                <div style="font-size: 1.3rem; font-weight: 700; color: #2a9d8f;">${userOrders.length}</div>
+                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Orders</div>
             </div>
-            <div style="background: rgba(255,107,107,0.1); padding: 1rem; border-radius: 10px; text-align: center;">
-                <div style="font-size: 1.5rem; font-weight: 700; color: #ff6b6b;">${formatPrice(totalSpent)}</div>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">Total Spent</div>
+            <div style="background: rgba(230,57,70,0.15); padding: 0.8rem; border-radius: 10px; text-align: center; border: 1px solid rgba(230,57,70,0.3);">
+                <div style="font-size: 1.3rem; font-weight: 700; color: #e63946;">${formatPrice(totalSpent)}</div>
+                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.6);">Total Spent</div>
             </div>
         </div>
         
         <!-- User Details -->
-        <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+        <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 10px; margin-bottom: 1.2rem; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem;">
                 <span style="color: rgba(255,255,255,0.6);">📞 Phone</span>
                 <span>${currentUser.phone || 'Not set'}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem;">
                 <span style="color: rgba(255,255,255,0.6);">📍 Address</span>
-                <span>${currentUser.address || 'Not set'}</span>
+                <span style="text-align: right; max-width: 60%;">${currentUser.address || 'Not set'}</span>
             </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span style="color: rgba(255,255,255,0.6);">📅 Member Since</span>
+            <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                <span style="color: rgba(255,255,255,0.6);">📅 Member</span>
                 <span>${currentUser.createdAt ? new Date(currentUser.createdAt).toLocaleDateString() : 'N/A'}</span>
             </div>
         </div>
         
-        <!-- Edit Buttons -->
-        <div style="display: grid; gap: 0.8rem; margin-bottom: 1.5rem;">
-            <button onclick="openEditProfile()" style="background: linear-gradient(45deg, #3b82f6, #2563eb); color: white; border: none; padding: 1rem; border-radius: 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+        <!-- Active Deliveries -->
+        ${activeOrders.length > 0 ? `
+            <div style="background: linear-gradient(135deg, rgba(42,157,143,0.2), rgba(42,157,143,0.1)); padding: 1rem; border-radius: 12px; margin-bottom: 1.2rem; border: 2px solid rgba(42,157,143,0.4);">
+                <h4 style="margin: 0 0 0.8rem 0; color: #2a9d8f; font-size: 0.95rem;">🚗 Active Delivery</h4>
+                ${activeOrders.map(o => `
+                    <div style="background: rgba(0,0,0,0.2); padding: 0.8rem; border-radius: 8px; margin-bottom: 0.5rem;">
+                        <div style="font-weight: 600; margin-bottom: 0.3rem;">#${o.id}</div>
+                        <div style="font-size: 0.85rem; color: rgba(255,255,255,0.7);">Driver: ${o.driverName || 'Assigned'}</div>
+                        ${o.estimatedTime ? `<div style="font-size: 0.85rem; color: #f4a261;">ETA: ~${o.estimatedTime} mins</div>` : ''}
+                    </div>
+                    <button onclick="trackDriver('${o.id}')" style="background: linear-gradient(45deg, #2a9d8f, #218373); color: white; border: none; padding: 0.8rem; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 0.9rem;">
+                        📍 Track Driver Live
+                    </button>
+                `).join('')}
+            </div>
+        ` : ''}
+        
+        <!-- Action Buttons -->
+        <div style="display: grid; gap: 0.6rem;">
+            <button onclick="openEditProfile()" style="background: linear-gradient(45deg, #3b82f6, #2563eb); color: white; border: none; padding: 0.9rem; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.95rem;">
                 ✏️ Edit Profile
             </button>
-            <button onclick="openChangeEmail()" style="background: linear-gradient(45deg, #f59e0b, #d97706); color: white; border: none; padding: 1rem; border-radius: 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+            <button onclick="openChangeEmail()" style="background: linear-gradient(45deg, #f4a261, #e76f51); color: white; border: none; padding: 0.9rem; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.95rem;">
                 📧 Change Email
             </button>
-            <button onclick="openChangePassword()" style="background: linear-gradient(45deg, #ef4444, #dc2626); color: white; border: none; padding: 1rem; border-radius: 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+            <button onclick="openChangePassword()" style="background: linear-gradient(45deg, #ef4444, #dc2626); color: white; border: none; padding: 0.9rem; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.95rem;">
                 🔒 Change Password
             </button>
         </div>
         
-        <!-- Active Orders (with Track Driver) -->
-        ${userOrders.filter(o => o.status === 'out_for_delivery').length > 0 ? `
-            <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: #10b981;">🚗 Active Deliveries</h4>
-            ${userOrders.filter(o => o.status === 'out_for_delivery').map(o => `
-                <div style="background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(5,150,105,0.2)); padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; border: 2px solid rgba(16,185,129,0.4);">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.8rem;">
-                        <span style="font-weight: 700;">#${o.id}</span>
-                        <span style="background: rgba(16,185,129,0.3); color: #10b981; padding: 0.2rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">🚗 EN ROUTE</span>
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                        <div style="margin-bottom: 0.5rem;">🚗 <strong>${o.driverName || 'Driver'}</strong></div>
-                        ${o.driverPhone ? `<div style="margin-bottom: 0.5rem;">📞 <a href="tel:${o.driverPhone}" style="color: #3b82f6;">${o.driverPhone}</a></div>` : ''}
-                        ${o.estimatedTime ? `<div style="color: #f59e0b; font-weight: 600;">⏱️ ETA: ~${o.estimatedTime} mins</div>` : ''}
-                    </div>
-                    <button onclick="trackDriver('${o.id}')" style="background: linear-gradient(45deg, #10b981, #059669); color: white; border: none; padding: 1rem; border-radius: 10px; cursor: pointer; font-weight: 600; width: 100%; font-size: 1rem;">
-                        📍 Track Driver Live
-                    </button>
-                </div>
-            `).join('')}
-        ` : ''}
-        
-        <!-- Pending Ratings -->
-        ${userOrders.filter(o => o.status === 'completed' && o.driverId && !o.driverRated).length > 0 ? `
-            <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: #f59e0b;">⭐ Rate Your Drivers</h4>
-            ${userOrders.filter(o => o.status === 'completed' && o.driverId && !o.driverRated).map(o => `
-                <div style="background: rgba(245,158,11,0.1); padding: 1rem; border-radius: 10px; margin-bottom: 0.8rem; border: 1px solid rgba(245,158,11,0.3);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div style="font-weight: 600; margin-bottom: 0.3rem;">#${o.id}</div>
-                            <div style="font-size: 0.85rem; color: rgba(255,255,255,0.7);">Driver: ${o.driverName || 'Unknown'}</div>
-                        </div>
-                        <button onclick="openDriverRating('${o.id}', '${o.driverId}', '${o.driverName || 'Driver'}')" style="background: linear-gradient(45deg, #f59e0b, #d97706); color: white; border: none; padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                            ⭐ Rate
-                        </button>
-                    </div>
-                </div>
-            `).join('')}
-        ` : ''}
-        
-        <!-- Recent Orders with Reorder -->
-        <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">📦 Order History</h4>
-        ${userOrders.length === 0 ? '<p style="color: rgba(255,255,255,0.5); text-align: center;">No orders yet</p>' : 
-            userOrders.slice(0, 10).map(o => `
-                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 10px; margin-bottom: 0.8rem;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span style="font-weight: 600;">#${o.id}</span>
-                        <span style="color: ${o.status === 'completed' ? '#10b981' : o.status === 'pending' ? '#f59e0b' : o.status === 'out_for_delivery' ? '#3b82f6' : '#ef4444'}; font-size: 0.85rem;">${o.status.toUpperCase().replace('_', ' ')}</span>
-                    </div>
-                    <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-bottom: 0.5rem;">${o.items.map(i => i.name).join(', ')}</div>
-                    ${o.driverRated ? `<div style="font-size: 0.8rem; color: #f59e0b; margin-bottom: 0.5rem;">⭐ Rated ${o.driverRating}/5</div>` : ''}
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <span style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">${o.items.length} items • </span>
-                            <span style="font-weight: 600; color: #10b981;">${formatPrice(o.total)}</span>
-                        </div>
-                        <button onclick="reorderFromHistory('${o.id}')" style="background: linear-gradient(45deg, #10b981, #059669); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-                            🔄 Reorder
-                        </button>
-                    </div>
-                    <div style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 0.3rem;">${new Date(o.createdAt).toLocaleString()}</div>
-                </div>
-            `).join('')
-        }
-        
-        <button onclick="logout()" class="submit-btn" style="margin-top: 1.5rem; background: rgba(239,68,68,0.2); color: #ef4444; border: 2px solid #ef4444;">
+        <button onclick="logout()" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 2px solid #ef4444; padding: 0.9rem; border-radius: 10px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 1rem; font-size: 0.95rem;">
             🚪 Logout
         </button>
     `;
     
     openModal('accountModal');
+}
+
+// ========================================
+// ========================================
+// ORDER HISTORY (Separate from Account)
+// ========================================
+function showOrderHistory() {
+    if (!currentUser) {
+        showLogin();
+        return;
+    }
+    
+    const modal = document.getElementById('orderHistoryModal');
+    const content = document.getElementById('orderHistoryContent');
+    
+    if (!modal || !content) return;
+    
+    const userOrders = [...orderHistory.filter(o => o.userId === currentUser.email)];
+    const pendingUserOrders = pendingOrders.filter(o => o.userId === currentUser.email);
+    const allOrders = [...pendingUserOrders, ...userOrders].sort((a, b) => 
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    
+    if (allOrders.length === 0) {
+        content.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: rgba(255,255,255,0.5);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+                <p>No orders yet</p>
+                <p style="font-size: 0.85rem; margin-top: 0.5rem;">Your order history will appear here</p>
+            </div>
+        `;
+    } else {
+        content.innerHTML = allOrders.map(o => {
+            const statusColor = o.status === 'completed' ? '#2a9d8f' : 
+                               o.status === 'pending' ? '#f4a261' : 
+                               o.status === 'out_for_delivery' ? '#3b82f6' : 
+                               o.status === 'accepted' || o.status === 'waiting_driver' ? '#2a9d8f' : '#ef4444';
+            
+            const statusText = o.status.replace(/_/g, ' ').toUpperCase();
+            const paymentIcon = o.paymentMethod === 'cash' ? '💷' : o.paymentMethod === 'applepay' ? '🍎' : '💳';
+            
+            return `
+                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px; margin-bottom: 0.8rem; border-left: 3px solid ${statusColor};">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                        <span style="font-weight: 700; font-size: 0.95rem;">#${o.id}</span>
+                        <span style="color: ${statusColor}; font-size: 0.75rem; font-weight: 600; background: ${statusColor}20; padding: 0.2rem 0.6rem; border-radius: 10px;">${statusText}</span>
+                    </div>
+                    
+                    <div style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 0.5rem;">
+                        ${o.items.map(i => `${i.name}`).join(', ')}
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span style="font-size: 0.8rem; color: rgba(255,255,255,0.5);">${o.items.length} items</span>
+                        <span style="font-weight: 700; color: #2a9d8f;">${formatPrice(o.total)}</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <span style="font-size: 0.75rem; color: rgba(255,255,255,0.4);">${new Date(o.createdAt).toLocaleString()}</span>
+                        <span style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">${paymentIcon} ${o.paymentMethod || 'N/A'}</span>
+                    </div>
+                    
+                    ${o.driverRated ? `<div style="font-size: 0.75rem; color: #f4a261; margin-top: 0.4rem;">⭐ Rated ${o.driverRating}/5</div>` : ''}
+                    
+                    ${o.status === 'out_for_delivery' ? `
+                        <button onclick="trackDriver('${o.id}'); closeModal('orderHistoryModal');" style="background: linear-gradient(45deg, #2a9d8f, #218373); color: white; border: none; padding: 0.7rem; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 0.8rem; font-size: 0.9rem;">
+                            📍 Track Driver
+                        </button>
+                    ` : ''}
+                    
+                    ${o.status === 'completed' && o.driverId && !o.driverRated ? `
+                        <button onclick="openDriverRating('${o.id}', '${o.driverId}', '${o.driverName || 'Driver'}'); closeModal('orderHistoryModal');" style="background: linear-gradient(45deg, #f4a261, #e76f51); color: white; border: none; padding: 0.7rem; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 0.8rem; font-size: 0.9rem;">
+                            ⭐ Rate Driver
+                        </button>
+                    ` : ''}
+                    
+                    <button onclick="reorderFromHistory('${o.id}'); closeModal('orderHistoryModal');" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 0.6rem; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 0.5rem; font-size: 0.85rem;">
+                        🔄 Reorder
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    openModal('orderHistoryModal');
+}
+
+function updateOrdersBadge() {
+    const badge = document.getElementById('ordersBadge');
+    if (badge && currentUser) {
+        const activeOrders = pendingOrders.filter(o => 
+            o.userId === currentUser.email && 
+            ['pending', 'accepted', 'waiting_driver', 'out_for_delivery'].includes(o.status)
+        ).length;
+        badge.textContent = activeOrders;
+        badge.style.display = activeOrders > 0 ? 'flex' : 'none';
+    }
 }
 
 // ========================================
@@ -2502,29 +2572,28 @@ function showRestaurantDashboard() {
     const modal = document.getElementById('restaurantDashboard');
     if (!modal) return;
     
-    // Calculate MONTHLY stats (current month only)
+    // Calculate DAILY stats (today only)
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const today = now.toDateString();
     
-    // Filter orders from current month
-    const monthlyOrders = [...pendingOrders, ...orderHistory].filter(o => {
+    // Filter orders from today
+    const dailyOrders = [...pendingOrders, ...orderHistory].filter(o => {
         const orderDate = new Date(o.createdAt);
-        return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+        return orderDate.toDateString() === today;
     });
     
-    const monthlyRevenue = monthlyOrders.reduce((sum, o) => sum + o.total, 0);
+    const dailyRevenue = dailyOrders.reduce((sum, o) => sum + o.total, 0);
     const pendingCount = pendingOrders.filter(o => o.status === 'pending').length;
-    const completedCount = monthlyOrders.filter(o => o.status === 'completed').length;
+    const completedCount = dailyOrders.filter(o => o.status === 'completed').length;
     
-    // Update stats - Monthly only (no total revenue for staff)
-    const monthlyRevenueEl = document.getElementById('monthlyRevenueStat');
-    const monthlyOrdersEl = document.getElementById('monthlyOrdersStat');
+    // Update stats - Daily only (no total revenue for staff)
+    const dailyRevenueEl = document.getElementById('monthlyRevenueStat');
+    const dailyOrdersEl = document.getElementById('monthlyOrdersStat');
     const pendingOrdersEl = document.getElementById('pendingOrdersStat');
     const completedOrdersEl = document.getElementById('completedOrdersStat');
     
-    if (monthlyRevenueEl) monthlyRevenueEl.textContent = formatPrice(monthlyRevenue);
-    if (monthlyOrdersEl) monthlyOrdersEl.textContent = monthlyOrders.length;
+    if (dailyRevenueEl) dailyRevenueEl.textContent = formatPrice(dailyRevenue);
+    if (dailyOrdersEl) dailyOrdersEl.textContent = dailyOrders.length;
     if (pendingOrdersEl) pendingOrdersEl.textContent = pendingCount;
     if (completedOrdersEl) completedOrdersEl.textContent = completedCount;
     
@@ -2567,6 +2636,11 @@ function showRestaurantDashboard() {
                     </div>
                     
                     <div style="color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 1rem;">🕐 ${new Date(order.createdAt).toLocaleString()}</div>
+                    
+                    <!-- Payment Method Badge -->
+                    <div style="background: ${order.paymentMethod === 'cash' ? 'rgba(245,158,11,0.2)' : order.paymentMethod === 'applepay' ? 'rgba(0,0,0,0.3)' : 'rgba(59,130,246,0.2)'}; padding: 0.5rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                        ${order.paymentMethod === 'cash' ? '💷 CASH' : order.paymentMethod === 'applepay' ? '🍎 Apple Pay' : '💳 CARD'} ${order.paymentMethod === 'cash' ? '- Collect Payment' : '- PAID'}
+                    </div>
                     
                     <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
                         <div style="font-weight: 600; margin-bottom: 0.5rem;">Items:</div>
@@ -3516,6 +3590,13 @@ function showDriverDashboard(driver = null) {
                             <span style="color: #f59e0b; font-weight: 600;">${order.estimatedTime} mins</span>
                         </div>
                     ` : ''}
+                    
+                    <!-- Payment Method for Driver -->
+                    <div style="margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div style="background: ${order.paymentMethod === 'cash' ? 'rgba(245,158,11,0.3)' : 'rgba(42,157,143,0.3)'}; padding: 0.6rem; border-radius: 8px; text-align: center; font-weight: 700; color: ${order.paymentMethod === 'cash' ? '#f4a261' : '#2a9d8f'};">
+                            ${order.paymentMethod === 'cash' ? '💷 CASH - Collect £' + order.total.toFixed(2) : order.paymentMethod === 'applepay' ? '🍎 Apple Pay - PAID' : '💳 Card - PAID'}
+                        </div>
+                    </div>
                 </div>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
@@ -3582,25 +3663,84 @@ function updateDriverLocation() {
         return;
     }
     
+    const driverId = sessionStorage.getItem('loggedInDriver');
+    if (!driverId) {
+        alert('❌ Please login first');
+        return;
+    }
+    
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            const driverId = sessionStorage.getItem('loggedInDriver');
-            if (driverId) {
-                window.driverSystem.update(driverId, {
-                    currentLocation: {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        updatedAt: new Date().toISOString()
-                    }
-                });
-                alert('✅ Location updated successfully!');
-            }
+            const locationData = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Update driver's location in system
+            window.driverSystem.update(driverId, {
+                currentLocation: locationData
+            });
+            
+            // Save to localStorage for customer tracking
+            const liveLocations = JSON.parse(localStorage.getItem('driverLiveLocations') || '{}');
+            liveLocations[driverId] = locationData;
+            localStorage.setItem('driverLiveLocations', JSON.stringify(liveLocations));
+            
+            alert('✅ Location updated!\n\nCustomers can now see your live location.');
+            showDriverDashboard();
         },
         (error) => {
             alert('❌ Unable to get your location: ' + error.message);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         }
     );
 }
+
+// Auto-update driver location every 30 seconds when online
+function startDriverLocationTracking() {
+    const driverId = sessionStorage.getItem('loggedInDriver');
+    if (!driverId) return;
+    
+    const driver = window.driverSystem.get(driverId);
+    if (!driver || !driver.available) return;
+    
+    // Check if there are assigned orders
+    const hasOrders = pendingOrders.some(o => o.driverId === driverId);
+    if (!hasOrders) return;
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const locationData = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                window.driverSystem.update(driverId, { currentLocation: locationData });
+                
+                const liveLocations = JSON.parse(localStorage.getItem('driverLiveLocations') || '{}');
+                liveLocations[driverId] = locationData;
+                localStorage.setItem('driverLiveLocations', JSON.stringify(liveLocations));
+            },
+            () => {}, // Silently fail
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    }
+}
+
+// Start tracking when driver goes online or accepts order
+setInterval(() => {
+    const driverId = sessionStorage.getItem('loggedInDriver');
+    if (driverId) {
+        startDriverLocationTracking();
+    }
+}, 30000); // Update every 30 seconds
 
 function openDirections(address) {
     // Open Google Maps with directions
@@ -3754,9 +3894,22 @@ function initTrackingMap(order, driver) {
     const customerLat = order.deliveryLocation?.lat || UK_CONFIG.restaurant.lat + 0.01;
     const customerLng = order.deliveryLocation?.lng || UK_CONFIG.restaurant.lng + 0.01;
     
-    // Driver location (simulated - starts near restaurant)
-    const driverLat = driver?.currentLocation?.lat || UK_CONFIG.restaurant.lat + 0.005;
-    const driverLng = driver?.currentLocation?.lng || UK_CONFIG.restaurant.lng + 0.003;
+    // Driver location - check if driver has real location, otherwise simulate
+    let driverLat, driverLng;
+    
+    // Check for real-time driver location from localStorage
+    const liveDriverLocations = JSON.parse(localStorage.getItem('driverLiveLocations') || '{}');
+    if (liveDriverLocations[order.driverId]) {
+        driverLat = liveDriverLocations[order.driverId].lat;
+        driverLng = liveDriverLocations[order.driverId].lng;
+    } else if (driver?.currentLocation?.lat) {
+        driverLat = driver.currentLocation.lat;
+        driverLng = driver.currentLocation.lng;
+    } else {
+        // Simulate starting from restaurant
+        driverLat = UK_CONFIG.restaurant.lat;
+        driverLng = UK_CONFIG.restaurant.lng;
+    }
     
     const center = {
         lat: (customerLat + driverLat) / 2,
@@ -3765,39 +3918,46 @@ function initTrackingMap(order, driver) {
     
     trackingMap = new google.maps.Map(mapContainer, {
         center: center,
-        zoom: 14,
-        styles: [
-            { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] }
-        ],
-        disableDefaultUI: true,
-        zoomControl: true
+        zoom: 15,
+        mapTypeId: 'hybrid', // Satellite with labels
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+            style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+            position: google.maps.ControlPosition.TOP_RIGHT
+        },
+        gestureHandling: 'greedy', // Single finger drag on mobile
+        zoomControl: true,
+        fullscreenControl: false,
+        streetViewControl: false
     });
     
-    // Customer marker (destination)
+    // Customer marker (destination) - House icon
     customerMarker = new google.maps.Marker({
         position: { lat: customerLat, lng: customerLng },
         map: trackingMap,
         title: 'Delivery Location',
         icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
+            scale: 14,
             fillColor: '#10b981',
             fillOpacity: 1,
             strokeColor: '#ffffff',
             strokeWeight: 3
+        },
+        label: {
+            text: '🏠',
+            fontSize: '16px'
         }
     });
     
-    // Driver marker
+    // Driver marker - Car icon
     driverMarker = new google.maps.Marker({
         position: { lat: driverLat, lng: driverLng },
         map: trackingMap,
         title: order.driverName || 'Driver',
         icon: {
             path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 6,
+            scale: 7,
             fillColor: '#3b82f6',
             fillOpacity: 1,
             strokeColor: '#ffffff',
@@ -3899,6 +4059,13 @@ function closeTrackingModal() {
 let currentRating = 0;
 
 function openDriverRating(orderId, driverId, driverName) {
+    // Check if order was already rated
+    const order = orderHistory.find(o => o.id === orderId);
+    if (order && order.driverRated) {
+        alert(`⚠️ You have already rated this driver!\n\nRating: ${order.driverRating}/5 stars`);
+        return;
+    }
+    
     document.getElementById('ratingOrderId').value = orderId;
     document.getElementById('ratingDriverId').value = driverId;
     document.getElementById('ratingDriverName').textContent = driverName;
@@ -4051,11 +4218,16 @@ function initMap() {
     googleMap = new google.maps.Map(mapContainer, {
         center: center,
         zoom: 14,
-        styles: [
-            { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-            { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] }
-        ]
+        mapTypeId: 'hybrid', // Satellite with labels
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+            style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+            position: google.maps.ControlPosition.TOP_RIGHT
+        },
+        gestureHandling: 'greedy', // Single finger drag on mobile
+        zoomControl: true,
+        fullscreenControl: false,
+        streetViewControl: false
     });
     
     // Restaurant marker
@@ -4066,7 +4238,7 @@ function initMap() {
         icon: {
             url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-                    <circle cx="20" cy="20" r="18" fill="#ff6b6b" stroke="#fff" stroke-width="3"/>
+                    <circle cx="20" cy="20" r="18" fill="#e63946" stroke="#fff" stroke-width="3"/>
                     <text x="20" y="26" font-size="18" text-anchor="middle" fill="#fff">🌯</text>
                 </svg>
             `),
@@ -4080,6 +4252,20 @@ function initMap() {
     });
 }
 
+// Variable to track if picking for profile
+let pickingForProfile = false;
+
+function pickLocationForProfile() {
+    pickingForProfile = true;
+    closeModal('editProfileModal');
+    
+    const modal = document.getElementById('mapModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+    setTimeout(() => initMap(), 100);
+}
+
 function addMarker(location) {
     if (mapMarker) mapMarker.setMap(null);
     
@@ -4089,7 +4275,7 @@ function addMarker(location) {
         icon: {
             url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-                    <circle cx="20" cy="20" r="18" fill="#10b981" stroke="#fff" stroke-width="3"/>
+                    <circle cx="20" cy="20" r="18" fill="#2a9d8f" stroke="#fff" stroke-width="3"/>
                     <text x="20" y="26" font-size="18" text-anchor="middle" fill="#fff">📍</text>
                 </svg>
             `),
@@ -4113,19 +4299,33 @@ function addMarker(location) {
     const deliveryInfo = getDeliveryCost(distance);
     document.getElementById('selectedLocationText').innerHTML = `
         📍 ${distance.toFixed(1)} miles from restaurant<br>
-        <span style="color: ${deliveryInfo.available ? '#10b981' : '#ef4444'};">${deliveryInfo.message}</span>
+        <span style="color: ${deliveryInfo.available ? '#2a9d8f' : '#ef4444'};">${deliveryInfo.message}</span>
     `;
     
-    // Try to get address
+    // Try to get address via geocoding
     if (window.google && google.maps.Geocoder) {
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ location: location }, (results, status) => {
             if (status === 'OK' && results[0]) {
                 selectedLocation.address = results[0].formatted_address;
+                
+                // Update location display
                 document.getElementById('selectedLocationText').innerHTML = `
                     📍 ${selectedLocation.address}<br>
-                    <span style="color: ${deliveryInfo.available ? '#10b981' : '#ef4444'};">${deliveryInfo.message}</span>
+                    <span style="color: ${deliveryInfo.available ? '#2a9d8f' : '#ef4444'};">${deliveryInfo.message}</span>
                 `;
+                
+                // Also update edit profile address field if it exists
+                const editAddressField = document.getElementById('editAddress');
+                if (editAddressField) {
+                    editAddressField.value = selectedLocation.address;
+                }
+                
+                // Update auth address field if it exists
+                const authAddressField = document.getElementById('authAddress');
+                if (authAddressField) {
+                    authAddressField.value = selectedLocation.address;
+                }
             }
         });
     }
@@ -4194,8 +4394,27 @@ function confirmLocation() {
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
     }
     
-    closeModal('mapModal');
-    alert(`✅ Location confirmed!\n\n${selectedLocation.address || 'Location set'}\n${deliveryInfo.message}`);
+    // Close map modal
+    const mapModal = document.getElementById('mapModal');
+    if (mapModal) {
+        mapModal.style.display = 'none';
+    }
+    
+    // If we were picking for profile, reopen edit profile modal
+    if (pickingForProfile) {
+        pickingForProfile = false;
+        
+        // Update the edit address field
+        const editAddressField = document.getElementById('editAddress');
+        if (editAddressField && selectedLocation.address) {
+            editAddressField.value = selectedLocation.address;
+        }
+        
+        openEditProfile();
+        alert(`✅ Location set!\n\n${selectedLocation.address || 'Location confirmed'}`);
+    } else {
+        alert(`✅ Location confirmed!\n\n${selectedLocation.address || 'Location set'}\n${deliveryInfo.message}`);
+    }
 }
 
 // ========================================
@@ -4405,6 +4624,7 @@ window.getDistanceFromLatLng = getDistanceFromLatLng;
 window.trackDriver = trackDriver;
 window.refreshDriverLocation = refreshDriverLocation;
 window.closeTrackingModal = closeTrackingModal;
+window.startDriverLocationTracking = startDriverLocationTracking;
 
 // Driver rating functions
 window.openDriverRating = openDriverRating;
@@ -4412,6 +4632,14 @@ window.setRating = setRating;
 window.previewRating = previewRating;
 window.resetPreview = resetPreview;
 window.submitDriverRating = submitDriverRating;
+
+// Order functions
+window.userCanOrder = userCanOrder;
+window.showOrderHistory = showOrderHistory;
+window.updateOrdersBadge = updateOrdersBadge;
+
+// Location functions
+window.pickLocationForProfile = pickLocationForProfile;
 
 // Reorder functions
 window.reorderFromHistory = reorderFromHistory;
