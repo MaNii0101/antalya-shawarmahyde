@@ -11,9 +11,12 @@ const UK_CONFIG = {
     restaurant: {
         name: 'Antalya Shawarma',
         address: '181 Market St, Hyde SK14 1HF',
-        phone: '+44 121 293 0395',
+        phone: '+44 161 536 1862',
         lat: 53.4514,
-        lng: -2.0839
+        lng: -2.0839,
+        openTime: 11, // 11:00 AM
+        closeTime: 23, // 11:00 PM
+        lastOrderTime: 22.5 // 10:30 PM (22:30)
     },
     deliveryZones: {
         free: { max: 1, price: 0 },
@@ -23,6 +26,58 @@ const UK_CONFIG = {
     maxDeliveryDistance: 6,
     currency: '£'
 };
+
+// Check if restaurant is open for orders
+function isRestaurantOpen() {
+    const now = new Date();
+    const currentHour = now.getHours() + (now.getMinutes() / 60);
+    return currentHour >= UK_CONFIG.restaurant.openTime && currentHour < UK_CONFIG.restaurant.lastOrderTime;
+}
+
+function getRestaurantStatus() {
+    const now = new Date();
+    const currentHour = now.getHours() + (now.getMinutes() / 60);
+    
+    if (currentHour < UK_CONFIG.restaurant.openTime) {
+        return { open: false, message: `Opens at ${UK_CONFIG.restaurant.openTime}:00` };
+    } else if (currentHour >= UK_CONFIG.restaurant.closeTime) {
+        return { open: false, message: 'Closed for today' };
+    } else if (currentHour >= UK_CONFIG.restaurant.lastOrderTime) {
+        return { open: false, message: 'Kitchen closed - Last orders at 22:30' };
+    }
+    return { open: true, message: 'Open for orders' };
+}
+
+// Reset all website data
+function resetAllData() {
+    if (!confirm('⚠️ Are you sure you want to delete ALL data?\n\nThis will remove:\n- All user accounts\n- All order history\n- All driver data\n- All favorites & notifications\n\nThis cannot be undone!')) {
+        return;
+    }
+    
+    // Clear all localStorage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Reset global variables
+    cart = [];
+    currentUser = null;
+    userDatabase = [];
+    orderHistory = [];
+    pendingOrders = [];
+    userFavorites = {};
+    userNotifications = {};
+    selectedLocation = null;
+    isOwnerLoggedIn = false;
+    isRestaurantLoggedIn = false;
+    
+    // Reset driver system
+    if (window.driverSystem) {
+        window.driverSystem.drivers = {};
+    }
+    
+    alert('✅ All data has been reset!\n\nThe page will now reload.');
+    location.reload();
+}
 
 // ========================================
 // CREDENTIALS
@@ -546,42 +601,65 @@ const menuData = {
         }
     ],
     
-    // BURGERS
-    burgers: [
+    // KEBABS (Halal)
+    kebabs: [
         { 
             id: 1001, 
-            name: 'Classic Beef Burger', 
-            price: 7.99, 
-            icon: '🍔', 
-            desc: 'Beef patty served in a bun with salad',
+            name: 'Adana Kebab', 
+            price: 9.99, 
+            icon: '🥙', 
+            desc: 'Spiced minced lamb kebab served with salad, rice & naan',
             options: [
-                {name: 'Add Cheese', price: 1.00},
-                {name: 'Add Bacon', price: 1.50},
-                {name: 'Extra Patty', price: 2.50}
+                {name: 'Extra Meat', price: 2.50},
+                {name: 'Add Hummus', price: 1.00},
+                {name: 'Extra Naan', price: 1.50}
             ]
         },
         { 
             id: 1002, 
-            name: 'Chicken Burger', 
-            price: 7.49, 
-            icon: '🍔', 
-            desc: 'Crispy chicken fillet burger with lettuce and mayo',
+            name: 'Lamb Tikka Kebab', 
+            price: 10.99, 
+            icon: '🥙', 
+            desc: 'Tender lamb tikka pieces with salad & fresh naan',
             options: [
-                {name: 'Add Cheese', price: 1.00},
-                {name: 'Extra Chicken', price: 2.50},
-                {name: 'Make it Spicy', price: 0}
+                {name: 'Extra Meat', price: 3.00},
+                {name: 'Add Rice', price: 2.00},
+                {name: 'Add Hummus', price: 1.00}
             ]
         },
         { 
             id: 1003, 
-            name: 'Quarter Pounder Cheese', 
-            price: 8.99, 
-            icon: '🍔', 
-            desc: 'Quarter-pound cheeseburger served with chips',
+            name: 'Chicken Tikka Kebab', 
+            price: 9.49, 
+            icon: '🥙', 
+            desc: 'Marinated chicken tikka with salad & naan bread',
             options: [
-                {name: 'Extra Cheese', price: 1.00},
-                {name: 'Add Bacon', price: 1.50},
-                {name: 'Extra Patty', price: 3.00}
+                {name: 'Extra Chicken', price: 2.50},
+                {name: 'Add Rice', price: 2.00},
+                {name: 'Make it Spicy', price: 0}
+            ]
+        },
+        { 
+            id: 1004, 
+            name: 'Kofte Kebab', 
+            price: 8.99, 
+            icon: '🥙', 
+            desc: 'Traditional lamb kofte with fresh salad & sauce',
+            options: [
+                {name: 'Extra Kofte', price: 2.00},
+                {name: 'Add Cheese', price: 1.00},
+                {name: 'Extra Naan', price: 1.50}
+            ]
+        },
+        { 
+            id: 1005, 
+            name: 'Lamb Back Strap Fillet', 
+            price: 12.99, 
+            icon: '🥩', 
+            desc: 'Premium lamb fillet served with salad, sauce & naan',
+            options: [
+                {name: 'Extra Fillet', price: 4.00},
+                {name: 'Add Rice', price: 2.00}
             ]
         }
     ],
@@ -590,46 +668,46 @@ const menuData = {
     meals: [
         { 
             id: 1101, 
-            name: 'Margherita Meal Deal', 
-            price: 11.99, 
-            icon: '🍕', 
-            desc: 'Classic margherita pizza with chips and Pepsi',
+            name: 'Shawarma Meal Deal', 
+            price: 10.99, 
+            icon: '🌯', 
+            desc: 'Chicken shawarma wrap with chips and drink',
+            options: [
+                {name: 'Upgrade to Lamb', price: 1.00},
+                {name: 'Large Chips', price: 1.50}
+            ]
+        },
+        { 
+            id: 1102, 
+            name: 'Kebab Meal Deal', 
+            price: 12.99, 
+            icon: '🥙', 
+            desc: 'Choice of kebab with chips and drink',
             options: [
                 {name: 'Upgrade Drink', price: 1.00},
                 {name: 'Large Chips', price: 1.50}
             ]
         },
         { 
-            id: 1102, 
-            name: 'Chicken Strips Meal', 
-            price: 9.99, 
-            icon: '🍗', 
-            desc: 'Four chicken strips with chips and Pepsi',
-            options: [
-                {name: 'Extra Strips (2pc)', price: 2.00},
-                {name: 'Upgrade Drink', price: 1.00}
-            ]
-        },
-        { 
             id: 1103, 
-            name: 'Hot Wings Meal', 
-            price: 9.99, 
-            icon: '🍗', 
-            desc: 'Six hot wings with chips and Pepsi',
+            name: 'Grill Meal Deal', 
+            price: 14.99, 
+            icon: '🍖', 
+            desc: 'Mixed grill portion with chips and drink',
             options: [
-                {name: 'Extra Wings (3pc)', price: 3.00},
+                {name: 'Extra Meat', price: 3.00},
                 {name: 'Upgrade Drink', price: 1.00}
             ]
         },
         { 
             id: 1104, 
-            name: 'Burger Meal Deal', 
-            price: 10.99, 
-            icon: '🍔', 
-            desc: 'Quarter-pound cheeseburger with chips and Pepsi',
+            name: 'Family Sharing Deal', 
+            price: 29.99, 
+            icon: '🍽️', 
+            desc: '2 shawarma wraps, 2 portions chips, hummus & 2 drinks',
             options: [
-                {name: 'Upgrade to Double', price: 2.50},
-                {name: 'Large Chips', price: 1.50}
+                {name: 'Add Extra Wrap', price: 5.00},
+                {name: 'Add Falafel', price: 3.00}
             ]
         }
     ],
@@ -763,7 +841,7 @@ const categories = {
     chicken: { name: 'Roasted Chicken', icon: '🍗' },
     fatayer: { name: 'Fatayer', icon: '🥟' },
     pizza: { name: 'Pizza', icon: '🍕' },
-    burgers: { name: 'Burgers', icon: '🍔' },
+    kebabs: { name: 'Kebabs', icon: '🥙' },
     meals: { name: 'Meal Deals', icon: '🎁' },
     sides: { name: 'Sides & Extras', icon: '🥗' },
     sauces: { name: 'Sauces', icon: '🧄' },
@@ -1527,6 +1605,13 @@ function proceedToCheckout() {
         return;
     }
     
+    // Check if restaurant is open
+    const status = getRestaurantStatus();
+    if (!status.open) {
+        alert(`⚠️ Sorry, we're not accepting orders right now.\n\n${status.message}\n\nOpening hours: 11:00 - 23:00\nLast orders: 22:30`);
+        return;
+    }
+    
     if (!currentUser) {
         alert('❌ Please login first');
         showLogin();
@@ -1654,12 +1739,13 @@ function openCheckoutModal() {
 
 function handlePayment(event) {
     event.preventDefault();
+    event.stopPropagation();
     
     const paymentMethod = document.getElementById('paymentMethod').value;
     
     if (!paymentMethod) {
         alert('❌ Please select a payment method');
-        return;
+        return false;
     }
     
     if (paymentMethod === 'card') {
@@ -1670,19 +1756,19 @@ function handlePayment(event) {
         
         if (!isValidCardNumber(cardNumber)) {
             alert('❌ Invalid card number');
-            return;
+            return false;
         }
         if (!cardName || cardName.length < 2) {
             alert('❌ Please enter name on card');
-            return;
+            return false;
         }
         if (!isValidExpiry(expiry)) {
             alert('❌ Invalid expiry date');
-            return;
+            return false;
         }
         if (!isValidCVV(cvv)) {
             alert('❌ Invalid CVV');
-            return;
+            return false;
         }
     }
     
@@ -1738,12 +1824,20 @@ function handlePayment(event) {
     cart = [];
     saveCart();
     updateCartBadge();
+    updateOrdersBadge();
     
-    // Close checkout and show confirmation
-    closeModal('checkoutModal');
+    // Force close checkout modal
+    const checkoutModal = document.getElementById('checkoutModal');
+    if (checkoutModal) {
+        checkoutModal.style.display = 'none';
+        checkoutModal.classList.remove('active');
+    }
+    
     playNotificationSound();
     
     alert(`✅ Order Placed Successfully!\n\nOrder ID: ${orderId}\nTotal: ${formatPrice(order.total)}\n\nYou will receive updates on your order status.`);
+    
+    return false;
 }
 
 // ========================================
@@ -2140,6 +2234,7 @@ function previewProfilePic(input) {
 
 function saveProfileChanges(event) {
     event.preventDefault();
+    event.stopPropagation();
     
     const name = document.getElementById('editName').value.trim();
     const age = document.getElementById('editAge').value;
@@ -2150,14 +2245,19 @@ function saveProfileChanges(event) {
     
     if (!name) {
         alert('❌ Name is required');
-        return;
+        return false;
     }
     
     // Update current user
     currentUser.name = name;
     currentUser.age = age ? parseInt(age) : null;
     currentUser.phone = phone;
-    currentUser.address = address;
+    currentUser.address = address || (selectedLocation ? selectedLocation.address : currentUser.address);
+    
+    // Update location if selected
+    if (selectedLocation) {
+        currentUser.location = selectedLocation;
+    }
     
     if (newPic) {
         currentUser.profilePicture = newPic;
@@ -2173,10 +2273,18 @@ function saveProfileChanges(event) {
     localStorage.setItem('currentUser', JSON.stringify(currentUser));
     saveData();
     
-    closeModal('editProfileModal');
+    // Force close modal
+    const modal = document.getElementById('editProfileModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+    }
+    
+    // Show success and refresh account
+    alert('✅ Profile updated successfully!');
     showAccount();
     
-    alert('✅ Profile updated successfully!');
+    return false;
 }
 
 function openChangeEmail() {
@@ -4637,6 +4745,11 @@ window.submitDriverRating = submitDriverRating;
 window.userCanOrder = userCanOrder;
 window.showOrderHistory = showOrderHistory;
 window.updateOrdersBadge = updateOrdersBadge;
+
+// Restaurant status functions
+window.isRestaurantOpen = isRestaurantOpen;
+window.getRestaurantStatus = getRestaurantStatus;
+window.resetAllData = resetAllData;
 
 // Location functions
 window.pickLocationForProfile = pickLocationForProfile;

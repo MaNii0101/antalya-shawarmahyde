@@ -134,69 +134,81 @@ html {
     /* Menu grid */
     .menu-grid {
         grid-template-columns: 1fr !important;
-        gap: 0.8rem;
+        gap: 1rem;
         padding: 1rem;
     }
     
-    /* Food card redesign */
+    /* Food card redesign - BIGGER */
     .food-card {
         display: flex;
         flex-direction: row;
-        padding: 0.8rem;
-        gap: 0.8rem;
+        padding: 1rem;
+        gap: 1rem;
         position: relative;
+        min-height: 120px;
+        border-radius: 12px;
     }
     
     .food-image {
-        width: 80px;
-        height: 80px;
-        font-size: 2.8rem;
+        width: 100px;
+        height: 100px;
+        font-size: 3.2rem;
         flex-shrink: 0;
-        border-radius: var(--radius-sm);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     
     .food-info {
         flex: 1;
         min-width: 0;
         padding: 0;
+        padding-right: 35px; /* Space for favorite button */
     }
     
     .food-name {
-        font-size: 1rem;
+        font-size: 1.05rem;
         font-weight: 700;
+        margin-bottom: 0.3rem;
     }
     
     .food-desc {
-        font-size: 0.8rem;
-        margin: 0 0 0.4rem 0;
-        line-height: 1.3;
+        font-size: 0.85rem;
+        margin: 0 0 0.5rem 0;
+        line-height: 1.4;
+        color: rgba(255,255,255,0.7);
     }
     
     .food-footer {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-top: auto;
     }
     
     .food-price {
-        font-size: 1.1rem;
+        font-size: 1.15rem;
         font-weight: 700;
     }
     
     .add-btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
         border-radius: var(--radius-sm);
-        min-height: 38px;
+        min-height: 42px;
     }
     
     .favorite-btn {
         position: absolute;
-        top: 0.5rem;
-        right: 0.5rem;
-        width: 32px;
-        height: 32px;
-        font-size: 1rem;
+        top: 0.8rem;
+        right: 0.8rem;
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+        background: rgba(0,0,0,0.5);
+        border-radius: 50%;
+        z-index: 5;
     }
     
     /* MODAL REDESIGN FOR MOBILE */
