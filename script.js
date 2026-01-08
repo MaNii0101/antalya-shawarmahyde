@@ -1398,11 +1398,25 @@ function openFoodModal(foodId) {
     selectedFood = findFood(foodId);
     if (!selectedFood) return;
     
+    // Check if food is available
+    if (selectedFood.available === false) {
+        alert('❌ Sorry, this item is currently not available.');
+        return;
+    }
+    
     quantity = 1;
     selectedCustomizations = [];
     
     document.getElementById('modalFoodName').textContent = selectedFood.name;
-    document.getElementById('modalFoodIcon').textContent = selectedFood.icon;
+    
+    // Show image or icon
+    const iconContainer = document.getElementById('modalFoodIcon');
+    if (selectedFood.image) {
+        iconContainer.innerHTML = `<img src="${selectedFood.image}" alt="${selectedFood.name}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 12px;">`;
+    } else {
+        iconContainer.innerHTML = selectedFood.icon;
+    }
+    
     document.getElementById('modalFoodDesc').textContent = selectedFood.desc;
     document.getElementById('modalFoodPrice').textContent = formatPrice(selectedFood.price);
     document.getElementById('quantity').textContent = '1';
@@ -1567,7 +1581,26 @@ function showFavorites() {
     
     const favIds = userFavorites[currentUser.email] || [];
     
-    if (favIds.length === 0) {
+    // Get existing items only (clean up deleted ones)
+    const favItems = [];
+    const validIds = [];
+    for (let cat of Object.keys(menuData)) {
+        menuData[cat].forEach(item => {
+            if (favIds.includes(item.id)) {
+                favItems.push(item);
+                validIds.push(item.id);
+            }
+        });
+    }
+    
+    // Clean up favorites if items were deleted
+    if (validIds.length !== favIds.length) {
+        userFavorites[currentUser.email] = validIds;
+        localStorage.setItem('userFavorites', JSON.stringify(userFavorites));
+        updateFavoritesBadge();
+    }
+    
+    if (favItems.length === 0) {
         content.innerHTML = `
             <div style="text-align: center; padding: 3rem; color: rgba(255,255,255,0.5);">
                 <div style="font-size: 4rem;">💔</div>
@@ -1576,27 +1609,28 @@ function showFavorites() {
             </div>
         `;
     } else {
-        const favItems = [];
-        for (let cat of Object.keys(menuData)) {
-            menuData[cat].forEach(item => {
-                if (favIds.includes(item.id)) {
-                    favItems.push(item);
-                }
-            });
-        }
-        
         content.innerHTML = `
             <div class="menu-grid" style="grid-template-columns: 1fr;">
-                ${favItems.map(item => `
-                    <div class="food-card" style="display: grid; grid-template-columns: 80px 1fr auto; align-items: center; padding: 1rem;">
-                        <div style="font-size: 3rem;">${item.icon}</div>
+                ${favItems.map(item => {
+                    const isUnavailable = item.available === false;
+                    const imageDisplay = item.image 
+                        ? `<img src="${item.image}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">` 
+                        : `<span style="font-size: 2.5rem;">${item.icon}</span>`;
+                    
+                    return `
+                    <div class="food-card" style="display: grid; grid-template-columns: 70px 1fr auto; align-items: center; padding: 1rem; ${isUnavailable ? 'opacity: 0.5;' : ''}">
+                        <div style="display: flex; align-items: center; justify-content: center;">${imageDisplay}</div>
                         <div>
-                            <div class="food-name">${item.name}</div>
+                            <div class="food-name" style="${isUnavailable ? 'text-decoration: line-through;' : ''}">${item.name}</div>
                             <div class="food-price">${formatPrice(item.price)}</div>
+                            ${isUnavailable ? '<div style="color: #ef4444; font-size: 0.75rem; font-weight: 600;">NOT AVAILABLE</div>' : ''}
                         </div>
-                        <button class="add-btn" onclick="openFoodModal(${item.id}); closeModal('favoritesModal');">Order</button>
+                        ${isUnavailable 
+                            ? '<span style="color: #ef4444; font-size: 0.8rem;">Unavailable</span>'
+                            : `<button class="add-btn" onclick="openFoodModal(${item.id}); closeModal('favoritesModal');">Order</button>`
+                        }
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
         `;
     }
@@ -2151,6 +2185,9 @@ function showOrderHistory() {
             const statusText = o.status.replace(/_/g, ' ').toUpperCase();
             const paymentIcon = o.paymentMethod === 'cash' ? '💷' : o.paymentMethod === 'applepay' ? '🍎' : '💳';
             
+            // Get driver info for active deliveries only
+            const driver = o.status === 'out_for_delivery' && o.driverId ? window.driverSystem.get(o.driverId) : null;
+            
             return `
                 <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px; margin-bottom: 0.8rem; border-left: 3px solid ${statusColor};">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
@@ -2172,11 +2209,18 @@ function showOrderHistory() {
                         <span style="font-size: 0.75rem; color: rgba(255,255,255,0.5);">${paymentIcon} ${o.paymentMethod || 'N/A'}</span>
                     </div>
                     
-                    ${o.driverRated ? `<div style="font-size: 0.75rem; color: #f4a261; margin-top: 0.4rem;">⭐ Rated ${o.driverRating}/5</div>` : ''}
+                    ${o.driverRated ? `<div style="font-size: 0.75rem; color: #f4a261; margin-top: 0.4rem;">⭐ Rated ${o.driverRating}/5 ${o.driverRatingComment ? '- "' + o.driverRatingComment + '"' : ''}</div>` : ''}
                     
-                    ${o.status === 'out_for_delivery' ? `
-                        <button onclick="trackDriver('${o.id}'); closeModal('orderHistoryModal');" style="background: linear-gradient(45deg, #2a9d8f, #218373); color: white; border: none; padding: 0.7rem; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 0.8rem; font-size: 0.9rem;">
-                            📍 Track Driver
+                    ${o.status === 'out_for_delivery' && driver ? `
+                        <div style="display: flex; align-items: center; gap: 0.8rem; margin-top: 0.8rem; padding: 0.8rem; background: rgba(59,130,246,0.1); border-radius: 8px;">
+                            ${driver.profilePic ? `<img src="${driver.profilePic}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover;">` : '<div style="width: 45px; height: 45px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">🚗</div>'}
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 0.9rem;">${driver.name || o.driverName || 'Driver'}</div>
+                                <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">On the way to you</div>
+                            </div>
+                        </div>
+                        <button onclick="trackDriver('${o.id}'); closeModal('orderHistoryModal');" style="background: linear-gradient(45deg, #2a9d8f, #218373); color: white; border: none; padding: 0.7rem; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 0.5rem; font-size: 0.9rem;">
+                            📍 Track Driver Live
                         </button>
                     ` : ''}
                     
@@ -2245,6 +2289,21 @@ function reorderFromHistory(orderId) {
 
 function confirmReorder() {
     if (!reorderData) return;
+    
+    // Check if any items are unavailable
+    const unavailableItems = [];
+    reorderData.items.forEach(item => {
+        const currentItem = findFood(item.id);
+        if (!currentItem || currentItem.available === false) {
+            unavailableItems.push(item.name);
+        }
+    });
+    
+    if (unavailableItems.length > 0) {
+        alert(`❌ Some items are no longer available:\n\n${unavailableItems.join('\n')}\n\nPlease order from the menu.`);
+        closeModal('reorderModal');
+        return;
+    }
     
     // Clear current cart
     cart = [];
@@ -3694,10 +3753,26 @@ function saveFoodItem() {
 function deleteFood(catKey, foodId) {
     if (!confirm('Are you sure you want to delete this food item?')) return;
     
+    // Remove from menu
     menuData[catKey] = menuData[catKey].filter(i => i.id !== foodId);
+    
+    // Clean up favorites for all users
+    Object.keys(userFavorites).forEach(userEmail => {
+        userFavorites[userEmail] = userFavorites[userEmail].filter(id => id !== foodId);
+    });
+    localStorage.setItem('userFavorites', JSON.stringify(userFavorites));
+    
+    // Clean up cart if item is there
+    cart = cart.filter(item => item.id !== foodId);
+    if (currentUser) {
+        localStorage.setItem('cart_' + currentUser.email, JSON.stringify(cart));
+    }
+    
     saveMenuData();
     renderMenuManagerList();
     displayMenu(currentCategory);
+    updateFavoritesBadge();
+    updateCartBadge();
 }
 
 function closeFoodEditor() {
@@ -3717,6 +3792,7 @@ function openAddCategory() {
         document.getElementById('categoryEditIcon').value = '🍽️';
         document.getElementById('categoryEditImage').value = '';
         document.getElementById('categoryEditImagePreview').innerHTML = '';
+        document.getElementById('deleteCategoryBtn').style.display = 'none';
         modal.style.display = 'flex';
     }
 }
@@ -3736,8 +3812,79 @@ function openEditCategory(catKey) {
         document.getElementById('categoryEditIcon').value = cat.icon || '🍽️';
         document.getElementById('categoryEditImage').value = cat.image || '';
         document.getElementById('categoryEditImagePreview').innerHTML = cat.image ? `<img src="${cat.image}" style="max-width: 100px; max-height: 100px; border-radius: 8px;">` : '';
+        document.getElementById('deleteCategoryBtn').style.display = 'block';
         modal.style.display = 'flex';
     }
+}
+
+function deleteCategory() {
+    if (!editingCategory) return;
+    
+    const itemCount = menuData[editingCategory]?.length || 0;
+    if (!confirm(`Are you sure you want to delete this category?\n\nThis will also delete ${itemCount} food items in it.`)) return;
+    
+    // Remove all food items from favorites
+    if (menuData[editingCategory]) {
+        menuData[editingCategory].forEach(item => {
+            Object.keys(userFavorites).forEach(userEmail => {
+                userFavorites[userEmail] = userFavorites[userEmail].filter(id => id !== item.id);
+            });
+        });
+        localStorage.setItem('userFavorites', JSON.stringify(userFavorites));
+    }
+    
+    // Delete category and its food items
+    delete menuData[editingCategory];
+    delete categories[editingCategory];
+    
+    saveMenuData();
+    closeCategoryEditor();
+    renderMenuManagerList();
+    renderCategories();
+    
+    // Switch to first available category
+    const firstCat = Object.keys(categories)[0];
+    if (firstCat) {
+        displayMenu(firstCat);
+    }
+    
+    updateFavoritesBadge();
+    alert('✅ Category deleted');
+}
+
+// Image upload handlers
+function handleFoodImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+        alert('❌ Image must be less than 2MB');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('foodEditImage').value = e.target.result;
+        previewFoodImage();
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleCategoryImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+        alert('❌ Image must be less than 2MB');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('categoryEditImage').value = e.target.result;
+        previewCategoryImage();
+    };
+    reader.readAsDataURL(file);
 }
 
 function saveCategory() {
@@ -4249,14 +4396,12 @@ function markOrderDelivered(orderId) {
         }
     }
     
-    // Notify customer with rating prompt
+    // Notify customer (without driver details for completed orders)
     addNotification(order.userId, {
         type: 'order_completed',
         title: '🎉 Order Delivered!',
-        message: `Your order #${orderId} has been delivered. Enjoy your meal!\n\n⭐ Please rate your driver in your account.`,
-        orderId: orderId,
-        driverId: order.driverId,
-        driverName: order.driverName
+        message: `Your order #${orderId} has been delivered. Enjoy your meal!`,
+        orderId: orderId
     });
     
     saveData();
@@ -4264,6 +4409,11 @@ function markOrderDelivered(orderId) {
     showDriverDashboard();
     
     alert('✅ Order marked as delivered!');
+    
+    // Trigger rating popup for customer if they're logged in
+    if (currentUser && currentUser.email === order.userId) {
+        showDeliveryRatingPopup(orderId, order.driverId, order.driverName || 'Driver');
+    }
 }
 
 function logoutDriver() {
@@ -4306,6 +4456,12 @@ function trackDriver(orderId) {
         return;
     }
     
+    // Check if order is still out for delivery
+    if (order.status === 'completed') {
+        alert('✅ This order has been delivered!');
+        return;
+    }
+    
     trackingOrderId = orderId;
     
     // Get driver info
@@ -4320,16 +4476,20 @@ function trackDriver(orderId) {
         orderIdDisplay.textContent = `Order #${orderId}`;
     }
     
-    // Render driver info panel
+    // Get driver image
+    const driverImage = driver?.profilePic || driver?.profilePicture || null;
+    
+    // Render driver info panel with image
     if (infoPanel) {
         infoPanel.innerHTML = `
             <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                <div style="width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; overflow: hidden;">
-                    ${driver && driver.profilePicture ? `<img src="${driver.profilePicture}" style="width: 100%; height: 100%; object-fit: cover;">` : '🚗'}
+                <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; overflow: hidden; border: 3px solid #10b981;">
+                    ${driverImage ? `<img src="${driverImage}" style="width: 100%; height: 100%; object-fit: cover;">` : '🚗'}
                 </div>
                 <div style="flex: 1;">
-                    <div style="font-weight: 700; color: white;">${order.driverName || 'Driver'}</div>
+                    <div style="font-weight: 700; color: white; font-size: 1.1rem;">${order.driverName || 'Driver'}</div>
                     <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">📞 ${order.driverPhone || 'N/A'}</div>
+                    ${driver?.rating ? `<div style="color: #f59e0b; font-size: 0.85rem;">⭐ ${driver.rating.toFixed(1)} rating</div>` : ''}
                 </div>
                 <div style="text-align: right;">
                     ${order.estimatedTime ? `<div style="color: #f59e0b; font-weight: 700; font-size: 1.2rem;">~${order.estimatedTime} min</div>` : ''}
@@ -4533,21 +4693,40 @@ function closeTrackingModal() {
 // ========================================
 let currentRating = 0;
 
-function openDriverRating(orderId, driverId, driverName) {
+function openDriverRating(orderId, driverId, driverName, autoPopup = false) {
     // Check if order was already rated
     const order = orderHistory.find(o => o.id === orderId);
     if (order && order.driverRated) {
-        alert(`⚠️ You have already rated this driver!\n\nRating: ${order.driverRating}/5 stars`);
+        if (!autoPopup) {
+            alert(`⚠️ You have already rated this driver!\n\nRating: ${order.driverRating}/5 stars`);
+        }
         return;
     }
+    
+    // Get driver info for image
+    const driver = window.driverSystem.get(driverId);
     
     document.getElementById('ratingOrderId').value = orderId;
     document.getElementById('ratingDriverId').value = driverId;
     document.getElementById('ratingDriverName').textContent = driverName;
     
+    // Show driver image if available
+    const driverImageContainer = document.getElementById('ratingDriverImage');
+    if (driverImageContainer) {
+        if (driver && driver.profilePic) {
+            driverImageContainer.innerHTML = `<img src="${driver.profilePic}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #f59e0b;">`;
+        } else {
+            driverImageContainer.innerHTML = `<div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #d97706); display: flex; align-items: center; justify-content: center; font-size: 2.5rem;">🚗</div>`;
+        }
+    }
+    
+    // Clear comment field
+    const commentField = document.getElementById('ratingComment');
+    if (commentField) commentField.value = '';
+    
     currentRating = 0;
     renderStarRating();
-    document.getElementById('ratingValue').textContent = '0.0';
+    document.getElementById('ratingValue').textContent = '0';
     
     openModal('driverRatingModal');
 }
@@ -4556,51 +4735,19 @@ function renderStarRating() {
     const container = document.getElementById('starRatingContainer');
     if (!container) return;
     
-    let html = '';
-    
-    // Create 10 half-stars (0.5 to 5.0)
-    for (let i = 1; i <= 10; i++) {
-        const value = i * 0.5;
-        const isHalf = i % 2 === 1;
-        const isFilled = value <= currentRating;
-        
-        html += `
-            <div onclick="setRating(${value})" 
-                 style="cursor: pointer; font-size: 2rem; transition: transform 0.2s; ${isFilled ? '' : 'opacity: 0.3;'}"
-                 onmouseover="this.style.transform='scale(1.2)'" 
-                 onmouseout="this.style.transform='scale(1)'">
-                ${isHalf ? '⭐' : ''}
-            </div>
-        `;
-    }
-    
-    // Simplified star display - 5 full stars
-    container.innerHTML = '';
-    for (let i = 1; i <= 5; i++) {
-        const isFull = i <= Math.floor(currentRating);
-        const isHalf = !isFull && i <= currentRating + 0.5 && currentRating % 1 !== 0;
-        
-        container.innerHTML += `
-            <div style="position: relative; cursor: pointer; font-size: 2.5rem;">
-                <span onclick="setRating(${i - 0.5})" style="position: absolute; left: 0; width: 50%; overflow: hidden; opacity: ${i - 0.5 <= currentRating ? 1 : 0.3};">⭐</span>
-                <span onclick="setRating(${i})" style="opacity: ${isFull ? 1 : 0.3};">⭐</span>
-            </div>
-        `;
-    }
-    
-    // Simpler implementation with clickable stars
+    // Simple 5-star rating (whole numbers only)
     container.innerHTML = `
-        <div style="display: flex; gap: 0.3rem;">
+        <div style="display: flex; gap: 0.5rem; justify-content: center;">
             ${[1, 2, 3, 4, 5].map(i => `
-                <div style="display: flex; flex-direction: column; align-items: center;">
-                    <span onclick="setRating(${i})" style="font-size: 2.5rem; cursor: pointer; opacity: ${i <= currentRating ? 1 : 0.3}; transition: all 0.2s;" onmouseover="previewRating(${i})" onmouseout="resetPreview()">⭐</span>
-                    <span style="font-size: 0.7rem; color: rgba(255,255,255,0.5);">${i}</span>
-                </div>
+                <div onclick="setRating(${i})" 
+                     style="font-size: 2.8rem; cursor: pointer; opacity: ${i <= currentRating ? 1 : 0.3}; transition: all 0.2s; transform: ${i <= currentRating ? 'scale(1.1)' : 'scale(1)'};" 
+                     onmouseover="previewRating(${i})" 
+                     onmouseout="resetPreview()">⭐</div>
             `).join('')}
         </div>
-        <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem;">
-            ${[0.5, 1.5, 2.5, 3.5, 4.5].map(i => `
-                <button onclick="setRating(${i})" style="background: ${currentRating === i ? '#f59e0b' : 'rgba(255,255,255,0.1)'}; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem;">${i}</button>
+        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; padding: 0 0.5rem;">
+            ${['Poor', 'Fair', 'Good', 'Great', 'Excellent'].map((label, i) => `
+                <span style="font-size: 0.7rem; color: rgba(255,255,255,0.4); text-align: center; width: 50px;">${label}</span>
             `).join('')}
         </div>
     `;
@@ -4608,15 +4755,16 @@ function renderStarRating() {
 
 function setRating(value) {
     currentRating = value;
-    document.getElementById('ratingValue').textContent = value.toFixed(1);
+    document.getElementById('ratingValue').textContent = value;
     renderStarRating();
 }
 
 function previewRating(value) {
     // Visual preview on hover
-    const stars = document.querySelectorAll('#starRatingContainer > div > span:first-child');
+    const stars = document.querySelectorAll('#starRatingContainer > div > div');
     stars.forEach((star, index) => {
         star.style.opacity = index + 1 <= value ? 1 : 0.3;
+        star.style.transform = index + 1 <= value ? 'scale(1.1)' : 'scale(1)';
     });
 }
 
@@ -4625,23 +4773,34 @@ function resetPreview() {
 }
 
 function submitDriverRating() {
-    if (currentRating < 0.5) {
-        alert('⚠️ Please select a rating');
+    if (currentRating < 1) {
+        alert('⚠️ Please select a rating (1-5 stars)');
         return;
     }
     
     const orderId = document.getElementById('ratingOrderId').value;
     const driverId = document.getElementById('ratingDriverId').value;
+    const comment = document.getElementById('ratingComment')?.value.trim() || '';
     
     // Find order and update
     const order = orderHistory.find(o => o.id === orderId);
     if (order) {
         order.driverRated = true;
         order.driverRating = currentRating;
+        order.driverRatingComment = comment;
         saveData();
     }
     
-    // Update driver's average rating
+    // Also update in pendingOrders if exists there
+    const pendingOrder = pendingOrders.find(o => o.id === orderId);
+    if (pendingOrder) {
+        pendingOrder.driverRated = true;
+        pendingOrder.driverRating = currentRating;
+        pendingOrder.driverRatingComment = comment;
+        saveData();
+    }
+    
+    // Update driver's average rating (keeps decimal precision internally)
     const driver = window.driverSystem.get(driverId);
     if (driver) {
         const totalRatings = (driver.totalRatings || 0) + 1;
@@ -4649,19 +4808,26 @@ function submitDriverRating() {
         const newAverage = ratingSum / totalRatings;
         
         window.driverSystem.update(driverId, {
-            rating: Math.round(newAverage * 10) / 10,
+            rating: Math.round(newAverage * 100) / 100, // Keep 2 decimal places internally
             totalRatings: totalRatings
         });
     }
     
     closeModal('driverRatingModal');
     
-    alert(`⭐ Thank you for rating your driver ${currentRating}/5 stars!`);
+    alert(`⭐ Thank you for your ${currentRating}-star rating!${comment ? '\n\nYour feedback has been saved.' : ''}`);
     
     // Refresh account page if open
-    if (document.getElementById('accountModal').classList.contains('active')) {
+    if (document.getElementById('accountModal')?.style.display === 'flex') {
         showAccount();
     }
+}
+
+// Auto-popup rating after delivery
+function showDeliveryRatingPopup(orderId, driverId, driverName) {
+    setTimeout(() => {
+        openDriverRating(orderId, driverId, driverName, true);
+    }, 1500);
 }
 
 function generateDriverSecretCode() {
@@ -5108,6 +5274,7 @@ window.setRating = setRating;
 window.previewRating = previewRating;
 window.resetPreview = resetPreview;
 window.submitDriverRating = submitDriverRating;
+window.showDeliveryRatingPopup = showDeliveryRatingPopup;
 
 // Order functions
 window.userCanOrder = userCanOrder;
@@ -5147,8 +5314,11 @@ window.openAddCategory = openAddCategory;
 window.openEditCategory = openEditCategory;
 window.saveCategory = saveCategory;
 window.closeCategoryEditor = closeCategoryEditor;
+window.deleteCategory = deleteCategory;
 window.previewFoodImage = previewFoodImage;
 window.previewCategoryImage = previewCategoryImage;
+window.handleFoodImageUpload = handleFoodImageUpload;
+window.handleCategoryImageUpload = handleCategoryImageUpload;
 window.saveMenuData = saveMenuData;
 window.loadMenuData = loadMenuData;
 
